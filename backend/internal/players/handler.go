@@ -23,6 +23,7 @@ func NewHandler(svc *Service) *Handler {
 
 func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
 	r.POST("/groups/:groupId/players", h.handleBulkCreate)
+	r.GET("/groups/:groupId/players", h.handleListActive)
 }
 
 type bulkCreateReq struct {
@@ -84,6 +85,29 @@ func (h *Handler) handleBulkCreate(c *gin.Context) {
 	default:
 		httpx.Reply(c, http.StatusInternalServerError, "Không thêm được người chơi", "")
 	}
+}
+
+func (h *Handler) handleListActive(c *gin.Context) {
+	hostID, ok := tenant.HostID(c)
+	if !ok {
+		httpx.Reply(c, http.StatusUnauthorized, "Chưa đăng nhập", "")
+		return
+	}
+	groupID, err := strconv.ParseUint(c.Param("groupId"), 10, 64)
+	if err != nil || groupID == 0 {
+		httpx.Reply(c, http.StatusNotFound, "Not found", "")
+		return
+	}
+	players, err := h.svc.ListActive(c.Request.Context(), hostID, groupID)
+	if err == nil {
+		c.JSON(http.StatusOK, gin.H{"players": players})
+		return
+	}
+	if errors.Is(err, ErrGroupNotFound) {
+		httpx.Reply(c, http.StatusNotFound, "Not found", "")
+		return
+	}
+	httpx.Reply(c, http.StatusInternalServerError, "Không đọc được danh sách người chơi", "")
 }
 
 func displayTier(t string) string {

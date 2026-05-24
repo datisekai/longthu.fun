@@ -36,6 +36,36 @@ export interface Player {
   isActive: boolean;
 }
 
+// Added in Story 1.10.
+export type CostItemType = 'court' | 'shuttle' | 'water' | 'other' | 'discount';
+
+export interface Session {
+  id: number;
+  groupId: number;
+  date: string; // YYYY-MM-DD
+  title?: string;
+  location?: string;
+  status: 'draft' | 'finalized' | 'archived';
+  totalCost: number;
+  shareCode?: string;
+  finalizedAt?: string;
+}
+
+export interface CostItem {
+  id: number;
+  sessionId: number;
+  type: CostItemType;
+  label: string;
+  amount: number;
+  isIncludedInSplit: boolean;
+}
+
+export interface SessionDraftSnapshot {
+  session: Session;
+  costItems: CostItem[];
+  participants: Array<{ playerId: number }>;
+}
+
 export interface RFC7807Problem {
   type: string;
   title: string;

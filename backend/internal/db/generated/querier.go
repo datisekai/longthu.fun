@@ -13,6 +13,13 @@ type Querier interface {
 	// Used to enforce tier caps in Service.BulkCreate.
 	CountActivePlayersInGroup(ctx context.Context, groupID uint64) (int64, error)
 	CountBankAccountsForHost(ctx context.Context, userID uint64) (int64, error)
+	// Used to validate that all submitted playerIds belong to the session's Group.
+	// Returns the count of matching active players; caller compares to len(submitted).
+	CountPlayersInGroupByIDs(ctx context.Context, arg CountPlayersInGroupByIDsParams) (int64, error)
+	// First half of the participant-replace tx (PUT semantics for the participant set).
+	DeleteAllSessionParticipants(ctx context.Context, sessionID uint64) error
+	// Removes a single cost item by its ID. Caller already verified session ownership.
+	DeleteSessionCostItem(ctx context.Context, arg DeleteSessionCostItemParams) error
 	// Added in Story 1.8 — used by Group create to auto-pick the host's default
 	// bank as `default_bank_account_id`. Returns sql.ErrNoRows if the host has
 	// no bank account yet; callers should treat that as "default_bank_account_id = NULL".
@@ -20,6 +27,9 @@ type Querier interface {
 	// Host-scoped lookup. Returning sql.ErrNoRows for both "missing" and
 	// "belongs to another host" preserves tenant isolation.
 	GetGroupByIDForHost(ctx context.Context, arg GetGroupByIDForHostParams) (Group, error)
+	// Tenant-isolated session read. Joins through groups so a host can't
+	// read another host's session, no enumeration leak.
+	GetSessionByIDForHost(ctx context.Context, arg GetSessionByIDForHostParams) (Session, error)
 	// Used at login. Returns sql.ErrNoRows when email is not registered.
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	// Used by the session middleware to enrich the request context with current tier.
@@ -33,15 +43,31 @@ type Querier interface {
 	// Single Player insert. Caller mints public_code via shortcode.GenerateUnique
 	// (uniqueness checked against PlayerExistsByPublicCode below).
 	InsertPlayer(ctx context.Context, arg InsertPlayerParams) (sql.Result, error)
+	// Creates a draft session. status defaults to 'draft' via the table default,
+	// but we set it explicitly for grep-ability.
+	InsertSession(ctx context.Context, arg InsertSessionParams) (sql.Result, error)
+	// Adds a cost item to a session draft.
+	InsertSessionCostItem(ctx context.Context, arg InsertSessionCostItemParams) (sql.Result, error)
+	// Second half of the participant-replace tx. Weight defaults to 1.00.
+	InsertSessionParticipant(ctx context.Context, arg InsertSessionParticipantParams) error
 	// Insert a new host user. Returns the result (use LastInsertId() for the new id).
 	InsertUser(ctx context.Context, arg InsertUserParams) (sql.Result, error)
+	// Returns the active roster for the participant picker (Story 1.10).
+	// Ordered by display_name for stable UX.
+	ListActivePlayersInGroup(ctx context.Context, groupID uint64) ([]ListActivePlayersInGroupRow, error)
 	// For duplicate-against-existing-roster detection. Returns even inactive
 	// players so the host can't accidentally re-add a name they marked inactive
 	// (the unique index uk_players_group_display_name would block at INSERT time
 	// anyway, but surfacing the conflict earlier gives a friendlier error).
 	ListPlayerDisplayNamesInGroup(ctx context.Context, groupID uint64) ([]string, error)
+	// Returns all cost items for a session in insertion order.
+	ListSessionCostItems(ctx context.Context, sessionID uint64) ([]ListSessionCostItemsRow, error)
+	// Returns the player IDs participating in a session.
+	ListSessionParticipants(ctx context.Context, sessionID uint64) ([]ListSessionParticipantsRow, error)
 	// Used by shortcode.GenerateUnique's `exists` callback.
 	PlayerExistsByPublicCode(ctx context.Context, publicCode string) (bool, error)
+	// Updates date/title/location on a draft session (host edits before finalize).
+	UpdateSessionDraftMeta(ctx context.Context, arg UpdateSessionDraftMetaParams) error
 }
 
 var _ Querier = (*Queries)(nil)

@@ -23,7 +23,7 @@ func NewHandler(svc *Service) *Handler {
 }
 
 func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
-	r.GET("/groups/:id", h.handleGet)
+	r.GET("/groups/:groupId", h.handleGet)
 	r.POST("/groups", h.handleCreate)
 }
 
@@ -34,7 +34,7 @@ func (h *Handler) handleGet(c *gin.Context) {
 		return
 	}
 
-	groupID, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	groupID, err := strconv.ParseUint(c.Param("groupId"), 10, 64)
 	if err != nil || groupID == 0 {
 		httpx.Reply(c, http.StatusNotFound, "Not found", "")
 		return

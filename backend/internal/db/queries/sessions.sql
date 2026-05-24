@@ -1,0 +1,60 @@
+-- name: InsertSession :execresult
+-- Creates a draft session. status defaults to 'draft' via the table default,
+-- but we set it explicitly for grep-ability.
+INSERT INTO sessions (group_id, `date`, title, location, status, created_by_user_id)
+VALUES (?, ?, ?, ?, 'draft', ?);
+
+-- name: GetSessionByIDForHost :one
+-- Tenant-isolated session read. Joins through groups so a host can't
+-- read another host's session, no enumeration leak.
+SELECT s.id, s.group_id, s.`date`, s.title, s.location,
+       s.start_time, s.end_time, s.total_cost, s.share_code,
+       s.status, s.created_by_user_id, s.finalized_at, s.created_at, s.updated_at
+FROM sessions s
+JOIN `groups` g ON g.id = s.group_id
+WHERE s.id = ? AND g.host_user_id = ?;
+
+-- name: UpdateSessionDraftMeta :exec
+-- Updates date/title/location on a draft session (host edits before finalize).
+UPDATE sessions
+SET `date` = ?, title = ?, location = ?
+WHERE id = ?;
+
+-- name: InsertSessionCostItem :execresult
+-- Adds a cost item to a session draft.
+INSERT INTO session_cost_items (session_id, type, label, amount, is_included_in_split)
+VALUES (?, ?, ?, ?, ?);
+
+-- name: DeleteSessionCostItem :exec
+-- Removes a single cost item by its ID. Caller already verified session ownership.
+DELETE FROM session_cost_items WHERE id = ? AND session_id = ?;
+
+-- name: ListSessionCostItems :many
+-- Returns all cost items for a session in insertion order.
+SELECT id, session_id, type, label, amount, notes, is_included_in_split, created_at
+FROM session_cost_items
+WHERE session_id = ?
+ORDER BY id;
+
+-- name: DeleteAllSessionParticipants :exec
+-- First half of the participant-replace tx (PUT semantics for the participant set).
+DELETE FROM session_participants WHERE session_id = ?;
+
+-- name: InsertSessionParticipant :exec
+-- Second half of the participant-replace tx. Weight defaults to 1.00.
+INSERT INTO session_participants (session_id, player_id, weight)
+VALUES (?, ?, 1.00);
+
+-- name: ListSessionParticipants :many
+-- Returns the player IDs participating in a session.
+SELECT id, session_id, player_id, weight
+FROM session_participants
+WHERE session_id = ?
+ORDER BY id;
+
+-- name: CountPlayersInGroupByIDs :one
+-- Used to validate that all submitted playerIds belong to the session's Group.
+-- Returns the count of matching active players; caller compares to len(submitted).
+SELECT COUNT(*)
+FROM players
+WHERE group_id = ? AND id IN (sqlc.slice('player_ids')) AND is_active = 1;

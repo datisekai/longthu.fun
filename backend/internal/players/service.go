@@ -176,6 +176,35 @@ func (s *Service) BulkCreate(ctx context.Context, hostID uint64, groupID uint64,
 	return inserted, nil
 }
 
+// ListActive returns the active roster for a Group (after verifying host ownership).
+// Story 1.10 uses this to populate the participant picker.
+func (s *Service) ListActive(ctx context.Context, hostID uint64, groupID uint64) ([]PublicPlayer, error) {
+	q := dbgen.New(s.db)
+	if _, err := q.GetGroupByIDForHost(ctx, dbgen.GetGroupByIDForHostParams{
+		ID: groupID, HostUserID: hostID,
+	}); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrGroupNotFound
+		}
+		return nil, fmt.Errorf("players.ListActive: group check: %w", err)
+	}
+	rows, err := q.ListActivePlayersInGroup(ctx, groupID)
+	if err != nil {
+		return nil, fmt.Errorf("players.ListActive: list: %w", err)
+	}
+	out := make([]PublicPlayer, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, PublicPlayer{
+			ID:          r.ID,
+			GroupID:     r.GroupID,
+			DisplayName: r.DisplayName,
+			PublicCode:  r.PublicCode,
+			IsActive:    r.IsActive,
+		})
+	}
+	return out, nil
+}
+
 // TypedError carries handler-relevant detail attached to a sentinel error.
 // Handler does `errors.As(err, &typed)` to unwrap.
 type TypedError struct {

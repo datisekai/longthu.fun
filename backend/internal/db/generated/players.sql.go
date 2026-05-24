@@ -39,6 +39,52 @@ func (q *Queries) InsertPlayer(ctx context.Context, arg InsertPlayerParams) (sql
 	return q.db.ExecContext(ctx, insertPlayer, arg.GroupID, arg.DisplayName, arg.PublicCode)
 }
 
+const listActivePlayersInGroup = `-- name: ListActivePlayersInGroup :many
+SELECT id, group_id, display_name, public_code, is_active
+FROM players
+WHERE group_id = ? AND is_active = 1
+ORDER BY display_name
+`
+
+type ListActivePlayersInGroupRow struct {
+	ID          uint64
+	GroupID     uint64
+	DisplayName string
+	PublicCode  string
+	IsActive    bool
+}
+
+// Returns the active roster for the participant picker (Story 1.10).
+// Ordered by display_name for stable UX.
+func (q *Queries) ListActivePlayersInGroup(ctx context.Context, groupID uint64) ([]ListActivePlayersInGroupRow, error) {
+	rows, err := q.db.QueryContext(ctx, listActivePlayersInGroup, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListActivePlayersInGroupRow{}
+	for rows.Next() {
+		var i ListActivePlayersInGroupRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.GroupID,
+			&i.DisplayName,
+			&i.PublicCode,
+			&i.IsActive,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPlayerDisplayNamesInGroup = `-- name: ListPlayerDisplayNamesInGroup :many
 SELECT display_name FROM players WHERE group_id = ?
 `

@@ -11,6 +11,7 @@ import { useAuthSession } from '@/hooks/useAuthSession';
 import { ApiError, apiRequest } from '@/lib/api';
 import { vi } from '@/locales/vi';
 import type { BankAccount, Group, Player, PublicUser } from '@/types/api';
+import { SessionDraftStep } from './-onboarding-session';
 
 export const bankOptions = [
   { code: 'MBBANK', label: vi.onboarding.bank.bankOptions.mbbank },
@@ -135,12 +136,9 @@ export function OnboardingPage() {
         group ? (
           <PlayersStep groupId={group.id} onSuccess={() => setStep(4)} />
         ) : null
-      ) : (
-        <section className="space-y-3">
-          <h2 className="text-xl font-semibold text-foreground">{vi.onboarding.step4.title}</h2>
-          <p className="text-sm leading-6 text-muted-foreground">{vi.onboarding.step4.body}</p>
-        </section>
-      )}
+      ) : group ? (
+        <SessionDraftStep groupId={group.id} />
+      ) : null}
     </main>
   );
 }
