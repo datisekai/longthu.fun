@@ -11,7 +11,9 @@ MIGRATE = $(shell go env GOPATH)/bin/migrate
 MIGRATE_PATH = ./migrations
 MIGRATE_DB = "$(DATABASE_URL)"
 
-.PHONY: help migrate-up migrate-down migrate-status migrate-create build run test vet fmt
+SQLC = $(shell go env GOPATH)/bin/sqlc
+
+.PHONY: help migrate-up migrate-down migrate-status migrate-create sqlc-generate build run test vet fmt
 
 help:
 	@echo "Targets:"
@@ -19,6 +21,7 @@ help:
 	@echo "  make migrate-down             Roll back the most recent migration"
 	@echo "  make migrate-status            Show current migration version"
 	@echo "  make migrate-create NAME=foo   Create a new pair of migration files"
+	@echo "  make sqlc-generate            Regenerate sqlc Go files"
 	@echo "  make build                    go build ./..."
 	@echo "  make run                      go run ./cmd/api"
 	@echo "  make test                     go test ./..."
@@ -37,6 +40,9 @@ migrate-status:
 migrate-create:
 	@if [ -z "$(NAME)" ]; then echo "usage: make migrate-create NAME=add_foo"; exit 1; fi
 	$(MIGRATE) create -ext sql -dir $(MIGRATE_PATH) -seq $(NAME)
+
+sqlc-generate:
+	$(SQLC) generate
 
 build:
 	go build ./...
