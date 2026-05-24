@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	dbpkg "github.com/datisekai/longthu.fun/backend/internal/db"
 	dbgen "github.com/datisekai/longthu.fun/backend/internal/db/generated"
 )
 
@@ -38,42 +39,44 @@ func (s *Service) Create(ctx context.Context, hostID uint64, params CreateParams
 		return PublicBankAccount{}, fmt.Errorf("bankaccounts.Create: unsupported bank code")
 	}
 
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return PublicBankAccount{}, fmt.Errorf("bankaccounts.Create: begin tx: %w", err)
-	}
-	defer tx.Rollback()
-
-	q := dbgen.New(tx)
-	count, err := q.CountBankAccountsForHost(ctx, hostID)
-	if err != nil {
-		return PublicBankAccount{}, fmt.Errorf("bankaccounts.Create: count: %w", err)
-	}
-	isDefault := count == 0
-
 	accountNumber := strings.TrimSpace(params.AccountNumber)
 	holderName := strings.TrimSpace(params.AccountHolderName)
-	res, err := q.InsertBankAccount(ctx, dbgen.InsertBankAccountParams{
-		UserID:            hostID,
-		BankName:          bankName,
-		BankCode:          params.BankCode,
-		AccountNumber:     accountNumber,
-		AccountHolderName: holderName,
-		IsDefault:         isDefault,
+
+	var (
+		newID     int64
+		isDefault bool
+	)
+	err := dbpkg.WithTx(ctx, s.db, func(tx *sql.Tx) error {
+		q := dbgen.New(tx)
+		count, err := q.CountBankAccountsForHost(ctx, hostID)
+		if err != nil {
+			return fmt.Errorf("bankaccounts.Create: count: %w", err)
+		}
+		isDefault = count == 0
+
+		res, err := q.InsertBankAccount(ctx, dbgen.InsertBankAccountParams{
+			UserID:            hostID,
+			BankName:          bankName,
+			BankCode:          params.BankCode,
+			AccountNumber:     accountNumber,
+			AccountHolderName: holderName,
+			IsDefault:         isDefault,
+		})
+		if err != nil {
+			return fmt.Errorf("bankaccounts.Create: insert: %w", err)
+		}
+		newID, err = res.LastInsertId()
+		if err != nil {
+			return fmt.Errorf("bankaccounts.Create: lastInsertId: %w", err)
+		}
+		return nil
 	})
 	if err != nil {
-		return PublicBankAccount{}, fmt.Errorf("bankaccounts.Create: insert: %w", err)
-	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		return PublicBankAccount{}, fmt.Errorf("bankaccounts.Create: lastInsertId: %w", err)
-	}
-	if err := tx.Commit(); err != nil {
-		return PublicBankAccount{}, fmt.Errorf("bankaccounts.Create: commit: %w", err)
+		return PublicBankAccount{}, err
 	}
 
 	return PublicBankAccount{
-		ID:                uint64(id),
+		ID:                uint64(newID),
 		BankName:          bankName,
 		BankCode:          params.BankCode,
 		AccountNumber:     accountNumber,

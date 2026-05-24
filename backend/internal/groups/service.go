@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/datisekai/longthu.fun/backend/internal/audit"
+	dbpkg "github.com/datisekai/longthu.fun/backend/internal/db"
 	dbgen "github.com/datisekai/longthu.fun/backend/internal/db/generated"
 )
 
@@ -68,52 +69,45 @@ func (s *Service) Create(ctx context.Context, hostID uint64, params CreateParams
 		return PublicGroup{}, ErrNameMissing
 	}
 
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return PublicGroup{}, fmt.Errorf("groups.Create: begin tx: %w", err)
-	}
-	defer tx.Rollback()
+	var newID int64
+	err := dbpkg.WithTx(ctx, s.db, func(tx *sql.Tx) error {
+		q := dbgen.New(tx)
 
-	q := dbgen.New(tx)
+		// Try to auto-pick the host's default bank. Missing bank is fine — NULL FK.
+		var defaultBankID sql.NullInt64
+		bank, err := q.GetDefaultBankAccountForHost(ctx, hostID)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("groups.Create: lookup default bank: %w", err)
+		}
+		if err == nil {
+			defaultBankID = sql.NullInt64{Int64: int64(bank.ID), Valid: true}
+		}
 
-	// Try to auto-pick the host's default bank. Missing bank is fine — NULL FK.
-	var defaultBankID sql.NullInt64
-	bank, err := q.GetDefaultBankAccountForHost(ctx, hostID)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return PublicGroup{}, fmt.Errorf("groups.Create: lookup default bank: %w", err)
-	}
-	if err == nil {
-		defaultBankID = sql.NullInt64{Int64: int64(bank.ID), Valid: true}
-	}
+		res, err := q.InsertGroup(ctx, dbgen.InsertGroupParams{
+			HostUserID:           hostID,
+			Name:                 name,
+			DefaultBankAccountID: defaultBankID,
+		})
+		if err != nil {
+			return fmt.Errorf("groups.Create: insert: %w", err)
+		}
+		newID, err = res.LastInsertId()
+		if err != nil {
+			return fmt.Errorf("groups.Create: lastInsertId: %w", err)
+		}
 
-	res, err := q.InsertGroup(ctx, dbgen.InsertGroupParams{
-		HostUserID:           hostID,
-		Name:                 name,
-		DefaultBankAccountID: defaultBankID,
+		// Audit row in the SAME transaction.
+		hostIDInt := int64(hostID)
+		return audit.Record(ctx, tx, audit.Event{
+			Type:       audit.EventGroupCreated,
+			ActorType:  audit.ActorHost,
+			HostUserID: &hostIDInt,
+			EntityType: "group",
+			EntityID:   newID,
+		})
 	})
 	if err != nil {
-		return PublicGroup{}, fmt.Errorf("groups.Create: insert: %w", err)
-	}
-	newID, err := res.LastInsertId()
-	if err != nil {
-		return PublicGroup{}, fmt.Errorf("groups.Create: lastInsertId: %w", err)
-	}
-
-	// Audit row in the SAME transaction — preserves atomicity per
-	// architecture §Cross-cutting decisions → Audit logging.
-	hostIDInt := int64(hostID)
-	if err := audit.Record(ctx, tx, audit.Event{
-		Type:       audit.EventGroupCreated,
-		ActorType:  audit.ActorHost,
-		HostUserID: &hostIDInt,
-		EntityType: "group",
-		EntityID:   newID,
-	}); err != nil {
-		return PublicGroup{}, fmt.Errorf("groups.Create: audit: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return PublicGroup{}, fmt.Errorf("groups.Create: commit: %w", err)
+		return PublicGroup{}, err
 	}
 
 	// Re-read to return the persisted row (picks up DB defaults like
