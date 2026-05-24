@@ -11,6 +11,10 @@ import (
 
 type Querier interface {
 	CountBankAccountsForHost(ctx context.Context, userID uint64) (int64, error)
+	// Added in Story 1.8 — used by Group create to auto-pick the host's default
+	// bank as `default_bank_account_id`. Returns sql.ErrNoRows if the host has
+	// no bank account yet; callers should treat that as "default_bank_account_id = NULL".
+	GetDefaultBankAccountForHost(ctx context.Context, userID uint64) (BankAccount, error)
 	// Host-scoped lookup. Returning sql.ErrNoRows for both "missing" and
 	// "belongs to another host" preserves tenant isolation.
 	GetGroupByIDForHost(ctx context.Context, arg GetGroupByIDForHostParams) (Group, error)
@@ -20,6 +24,10 @@ type Querier interface {
 	// Returns sql.ErrNoRows if the user has been hard-deleted (rare).
 	GetUserByID(ctx context.Context, id uint64) (User, error)
 	InsertBankAccount(ctx context.Context, arg InsertBankAccountParams) (sql.Result, error)
+	// Added in Story 1.8. privacy_mode defaults to 'public' and
+	// auto_detect_enabled defaults to 0 per the schema; slug stays NULL
+	// (vestigial per Story 1.2 §Completion Notes #2).
+	InsertGroup(ctx context.Context, arg InsertGroupParams) (sql.Result, error)
 	// Insert a new host user. Returns the result (use LastInsertId() for the new id).
 	InsertUser(ctx context.Context, arg InsertUserParams) (sql.Result, error)
 }

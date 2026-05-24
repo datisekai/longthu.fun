@@ -23,6 +23,35 @@ func (q *Queries) CountBankAccountsForHost(ctx context.Context, userID uint64) (
 	return count, err
 }
 
+const getDefaultBankAccountForHost = `-- name: GetDefaultBankAccountForHost :one
+SELECT id, user_id, bank_name, bank_code, account_number, account_holder_name, is_default,
+       default_flag, created_at, updated_at
+FROM bank_accounts
+WHERE user_id = ? AND is_default = 1
+LIMIT 1
+`
+
+// Added in Story 1.8 — used by Group create to auto-pick the host's default
+// bank as `default_bank_account_id`. Returns sql.ErrNoRows if the host has
+// no bank account yet; callers should treat that as "default_bank_account_id = NULL".
+func (q *Queries) GetDefaultBankAccountForHost(ctx context.Context, userID uint64) (BankAccount, error) {
+	row := q.db.QueryRowContext(ctx, getDefaultBankAccountForHost, userID)
+	var i BankAccount
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.BankName,
+		&i.BankCode,
+		&i.AccountNumber,
+		&i.AccountHolderName,
+		&i.IsDefault,
+		&i.DefaultFlag,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const insertBankAccount = `-- name: InsertBankAccount :execresult
 INSERT INTO bank_accounts (user_id, bank_name, bank_code, account_number, account_holder_name, is_default)
 VALUES (?, ?, ?, ?, ?, ?)

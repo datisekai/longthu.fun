@@ -7,3 +7,10 @@ SELECT id, host_user_id, name, slug, default_bank_account_id, telegram_chat_id,
 FROM `groups`
 WHERE id = ? AND host_user_id = ?
 LIMIT 1;
+
+-- name: InsertGroup :execresult
+-- Added in Story 1.8. privacy_mode defaults to 'public' and
+-- auto_detect_enabled defaults to 0 per the schema; slug stays NULL
+-- (vestigial per Story 1.2 §Completion Notes #2).
+INSERT INTO `groups` (host_user_id, name, default_bank_account_id)
+VALUES (?, ?, ?);

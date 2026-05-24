@@ -7,6 +7,7 @@ package dbgen
 
 import (
 	"context"
+	"database/sql"
 )
 
 const getGroupByIDForHost = `-- name: GetGroupByIDForHost :one
@@ -43,4 +44,22 @@ func (q *Queries) GetGroupByIDForHost(ctx context.Context, arg GetGroupByIDForHo
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const insertGroup = `-- name: InsertGroup :execresult
+INSERT INTO ` + "`" + `groups` + "`" + ` (host_user_id, name, default_bank_account_id)
+VALUES (?, ?, ?)
+`
+
+type InsertGroupParams struct {
+	HostUserID           uint64
+	Name                 string
+	DefaultBankAccountID sql.NullInt64
+}
+
+// Added in Story 1.8. privacy_mode defaults to 'public' and
+// auto_detect_enabled defaults to 0 per the schema; slug stays NULL
+// (vestigial per Story 1.2 §Completion Notes #2).
+func (q *Queries) InsertGroup(ctx context.Context, arg InsertGroupParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, insertGroup, arg.HostUserID, arg.Name, arg.DefaultBankAccountID)
 }

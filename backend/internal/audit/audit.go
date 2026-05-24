@@ -70,6 +70,9 @@ const (
 	// Admin actions
 	EventTierChanged     EventType = "tier_changed"
 	EventPlayerCodeReset EventType = "player_code_reset"
+
+	// Group lifecycle — added in Story 1.8.
+	EventGroupCreated EventType = "group_created"
 )
 
 // Event captures what to write. Callers populate the fields they have;
