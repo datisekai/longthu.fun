@@ -1,0 +1,5 @@
+tmp/
+bin/
+*.log
+.air.toml.local
+build-errors.log

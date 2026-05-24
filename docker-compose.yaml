@@ -1,0 +1,52 @@
+services:
+  frontend:
+    build: ./frontend
+    ports: ['5173:5173']
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      RSBUILD_PUBLIC_API_BASE_URL: http://localhost:8080
+    command: pnpm dev
+    profiles: ['full']
+
+  backend:
+    build: ./backend
+    ports: ['8080:8080']
+    volumes:
+      - ./backend:/app
+    environment:
+      DATABASE_URL: mysql://longthu:longthu@mysql:3306/longthu?parseTime=true&loc=Asia%2FHo_Chi_Minh
+      JWT_SECRET: dev-secret-change-in-prod
+      SECRETS_MASTER_KEY: dev-master-key-change-in-prod
+      APP_BASE_URL: http://localhost:5173
+      PORT: '8080'
+    depends_on:
+      mysql:
+        condition: service_healthy
+    profiles: ['full']
+
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpw
+      MYSQL_DATABASE: longthu
+      MYSQL_USER: longthu
+      MYSQL_PASSWORD: longthu
+    volumes:
+      - mysql-data:/var/lib/mysql
+    ports: ['3306:3306']
+    command:
+      [
+        '--character-set-server=utf8mb4',
+        '--collation-server=utf8mb4_0900_ai_ci',
+        '--default-time-zone=+07:00',
+      ]
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost', '-uroot', '-prootpw']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mysql-data:

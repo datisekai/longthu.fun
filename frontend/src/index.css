@@ -1,0 +1,52 @@
+@import 'tailwindcss';
+
+/* Đập net palette — DESIGN.md frontmatter tokens */
+@theme {
+  --color-background: #0a0a0a;
+  --color-foreground: #fafafa;
+  --color-card: #141414;
+  --color-card-foreground: #fafafa;
+  --color-popover: #141414;
+  --color-popover-foreground: #fafafa;
+  --color-primary: #00ff88;
+  --color-primary-foreground: #0a0a0a;
+  --color-secondary: #1f1f23;
+  --color-secondary-foreground: #fafafa;
+  --color-muted: #18181b;
+  --color-muted-foreground: #a1a1aa;
+  --color-accent: #c084fc;
+  --color-accent-foreground: #0a0a0a;
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #fafafa;
+  --color-border: #27272a;
+  --color-input: #27272a;
+  --color-ring: #00ff88;
+
+  --font-sans: 'Inter', 'SF Pro Display', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  --font-display: 'Bricolage Grotesque', 'Inter', system-ui, sans-serif;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-2xl: 24px;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
