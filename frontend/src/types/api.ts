@@ -9,6 +9,15 @@ export interface PublicUser {
   tier: 'free' | 'pro' | 'pro_plus';
 }
 
+export interface BankAccount {
+  id: number;
+  bankName: string;
+  bankCode: 'MBBANK' | 'VCB' | 'TPB';
+  accountNumber: string;
+  accountHolderName: string;
+  isDefault: boolean;
+}
+
 export interface RFC7807Problem {
   type: string;
   title: string;

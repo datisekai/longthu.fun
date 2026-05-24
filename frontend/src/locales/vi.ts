@@ -87,4 +87,35 @@ export const vi = {
     },
     logout: 'Đăng xuất',
   },
+  onboarding: {
+    title: 'Thiết lập nhóm đầu tiên',
+    stepLabel: 'Bước 1/4',
+    bank: {
+      title: 'Tài khoản nhận tiền',
+      subtitle: 'Thêm tài khoản ngân hàng để người chơi biết chuyển tiền về đâu.',
+      bankLabel: 'Ngân hàng',
+      accountNumberLabel: 'Số tài khoản',
+      accountNumberPlaceholder: 'VD: 123456789',
+      accountHolderLabel: 'Tên chủ tài khoản',
+      accountHolderPlaceholder: 'VD: NGUYEN VAN A',
+      submit: 'Lưu tài khoản',
+      submitting: 'Đang lưu…',
+      helper: 'Tài khoản đầu tiên sẽ tự động đặt làm mặc định.',
+      bankOptions: {
+        mbbank: 'MBBank',
+        vcb: 'Vietcombank',
+        tpb: 'TPBank',
+      },
+      errors: {
+        bankRequired: 'Chọn ngân hàng',
+        accountNumberInvalid: 'Số tài khoản chỉ gồm 8-16 chữ số',
+        holderRequired: 'Nhập tên chủ tài khoản',
+      },
+    },
+    step2: {
+      title: 'Tiếp theo: tạo group',
+      body: 'Tài khoản ngân hàng đã lưu. Bước sau mình sẽ tạo group cầu lông đầu tiên.',
+    },
+    finalizeBlocked: 'Bạn cần thêm tài khoản nhận tiền trước khi chốt buổi.',
+  },
 } as const;

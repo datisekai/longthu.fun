@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/datisekai/longthu.fun/backend/internal/auth"
+	"github.com/datisekai/longthu.fun/backend/internal/bankaccounts"
 	"github.com/datisekai/longthu.fun/backend/internal/config"
 	"github.com/datisekai/longthu.fun/backend/internal/groups"
 )
@@ -59,6 +60,10 @@ func New(cfg *config.Config, db *sql.DB, gitSHA string) *Server {
 	groupsSvc := groups.NewService(db)
 	groupsHandler := groups.NewHandler(groupsSvc)
 	groupsHandler.RegisterRoutes(v1Auth)
+
+	bankAccountsSvc := bankaccounts.NewService(db)
+	bankAccountsHandler := bankaccounts.NewHandler(bankAccountsSvc)
+	bankAccountsHandler.RegisterRoutes(v1Auth)
 
 	return &Server{cfg: cfg, db: db, router: r}
 }

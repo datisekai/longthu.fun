@@ -10,6 +10,7 @@ import (
 )
 
 type Querier interface {
+	CountBankAccountsForHost(ctx context.Context, userID uint64) (int64, error)
 	// Host-scoped lookup. Returning sql.ErrNoRows for both "missing" and
 	// "belongs to another host" preserves tenant isolation.
 	GetGroupByIDForHost(ctx context.Context, arg GetGroupByIDForHostParams) (Group, error)
@@ -18,6 +19,7 @@ type Querier interface {
 	// Used by the session middleware to enrich the request context with current tier.
 	// Returns sql.ErrNoRows if the user has been hard-deleted (rare).
 	GetUserByID(ctx context.Context, id uint64) (User, error)
+	InsertBankAccount(ctx context.Context, arg InsertBankAccountParams) (sql.Result, error)
 	// Insert a new host user. Returns the result (use LastInsertId() for the new id).
 	InsertUser(ctx context.Context, arg InsertUserParams) (sql.Result, error)
 }
