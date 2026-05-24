@@ -10,6 +10,8 @@ import (
 )
 
 type Querier interface {
+	// Used to enforce tier caps in Service.BulkCreate.
+	CountActivePlayersInGroup(ctx context.Context, groupID uint64) (int64, error)
 	CountBankAccountsForHost(ctx context.Context, userID uint64) (int64, error)
 	// Added in Story 1.8 — used by Group create to auto-pick the host's default
 	// bank as `default_bank_account_id`. Returns sql.ErrNoRows if the host has
@@ -28,8 +30,18 @@ type Querier interface {
 	// auto_detect_enabled defaults to 0 per the schema; slug stays NULL
 	// (vestigial per Story 1.2 §Completion Notes #2).
 	InsertGroup(ctx context.Context, arg InsertGroupParams) (sql.Result, error)
+	// Single Player insert. Caller mints public_code via shortcode.GenerateUnique
+	// (uniqueness checked against PlayerExistsByPublicCode below).
+	InsertPlayer(ctx context.Context, arg InsertPlayerParams) (sql.Result, error)
 	// Insert a new host user. Returns the result (use LastInsertId() for the new id).
 	InsertUser(ctx context.Context, arg InsertUserParams) (sql.Result, error)
+	// For duplicate-against-existing-roster detection. Returns even inactive
+	// players so the host can't accidentally re-add a name they marked inactive
+	// (the unique index uk_players_group_display_name would block at INSERT time
+	// anyway, but surfacing the conflict earlier gives a friendlier error).
+	ListPlayerDisplayNamesInGroup(ctx context.Context, groupID uint64) ([]string, error)
+	// Used by shortcode.GenerateUnique's `exists` callback.
+	PlayerExistsByPublicCode(ctx context.Context, publicCode string) (bool, error)
 }
 
 var _ Querier = (*Queries)(nil)

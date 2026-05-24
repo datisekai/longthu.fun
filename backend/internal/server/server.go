@@ -14,6 +14,7 @@ import (
 	"github.com/datisekai/longthu.fun/backend/internal/bankaccounts"
 	"github.com/datisekai/longthu.fun/backend/internal/config"
 	"github.com/datisekai/longthu.fun/backend/internal/groups"
+	"github.com/datisekai/longthu.fun/backend/internal/players"
 )
 
 // Server bundles the wired-up router + its dependencies.
@@ -64,6 +65,10 @@ func New(cfg *config.Config, db *sql.DB, gitSHA string) *Server {
 	bankAccountsSvc := bankaccounts.NewService(db)
 	bankAccountsHandler := bankaccounts.NewHandler(bankAccountsSvc)
 	bankAccountsHandler.RegisterRoutes(v1Auth)
+
+	playersSvc := players.NewService(db)
+	playersHandler := players.NewHandler(playersSvc)
+	playersHandler.RegisterRoutes(v1Auth)
 
 	return &Server{cfg: cfg, db: db, router: r}
 }

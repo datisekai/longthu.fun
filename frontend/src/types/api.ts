@@ -18,6 +18,24 @@ export interface BankAccount {
   isDefault: boolean;
 }
 
+// Added in Story 1.8.
+export interface Group {
+  id: number;
+  name: string;
+  privacyMode: 'public' | 'private_leaning';
+  autoDetectEnabled: boolean;
+  defaultBankAccountId?: number;
+}
+
+// Added in Story 1.9.
+export interface Player {
+  id: number;
+  groupId: number;
+  displayName: string;
+  publicCode: string;
+  isActive: boolean;
+}
+
 export interface RFC7807Problem {
   type: string;
   title: string;

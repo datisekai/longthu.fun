@@ -116,6 +116,46 @@ export const vi = {
       title: 'Tiếp theo: tạo group',
       body: 'Tài khoản ngân hàng đã lưu. Bước sau mình sẽ tạo group cầu lông đầu tiên.',
     },
+    // Story 1.8 — Group create step.
+    group: {
+      title: 'Tạo group cầu lông',
+      subtitle: 'Đặt tên group bạn hay đánh — VD: "Tối thứ 3", "Sân K34 cuối tuần".',
+      nameLabel: 'Tên group',
+      namePlaceholder: 'VD: Tối thứ 3',
+      submit: 'Tạo group',
+      submitting: 'Đang tạo group…',
+      helper: 'Mỗi group là một nhóm bạn chơi riêng; sau này bạn có thể tạo thêm group khác.',
+      errors: {
+        nameRequired: 'Tên group không được để trống',
+        nameTooLong: 'Tên group tối đa 120 ký tự',
+      },
+    },
+    step3: {
+      title: 'Tiếp theo: thêm người chơi',
+      body: 'Group đã tạo xong. Bước sau mình sẽ thêm các con vợ vào group.',
+    },
+    // Story 1.9 — bulk-add Players.
+    players: {
+      title: 'Thêm các con vợ vào group',
+      subtitle: 'Mỗi dòng là 1 tên người chơi. Tối đa theo gói: Free 6, PRO 8, PRO Plus 15.',
+      namesLabel: 'Danh sách người chơi',
+      namesPlaceholder: 'Đạt\nLý\nTâm\nHùng',
+      helper: 'Tên giữ nguyên dấu tiếng Việt. Trùng tên trong group sẽ bị từ chối.',
+      submit: 'Thêm vào group',
+      submitting: 'Đang thêm…',
+      summary: (count: number) => `${count} người sẵn sàng thêm vào group.`,
+      tierHint: (cap: number) => `Gói hiện tại cho phép tối đa ${cap} người/group.`,
+      errors: {
+        namesRequired: 'Cần ít nhất 1 tên người chơi',
+        tooMany: (cap: number) => `Quá nhiều: tối đa ${cap} người/group theo gói hiện tại`,
+        duplicateInSubmit: 'Có tên trùng trong danh sách, sửa lại rồi gửi nhé',
+        nameTooLong: 'Mỗi tên tối đa 60 ký tự',
+      },
+    },
+    step4: {
+      title: 'Xong rồi!',
+      body: 'Đã thêm xong các con vợ. Bước tiếp theo (US 1.10) sẽ tạo buổi đánh đầu tiên.',
+    },
     finalizeBlocked: 'Bạn cần thêm tài khoản nhận tiền trước khi chốt buổi.',
   },
 } as const;

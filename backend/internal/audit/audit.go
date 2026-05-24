@@ -73,6 +73,9 @@ const (
 
 	// Group lifecycle — added in Story 1.8.
 	EventGroupCreated EventType = "group_created"
+
+	// Player lifecycle — added in Story 1.9.
+	EventPlayerAdded EventType = "player_added"
 )
 
 // Event captures what to write. Callers populate the fields they have;
