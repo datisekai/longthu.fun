@@ -20,7 +20,8 @@ coverage.out
 
 # Generated
 frontend/src/routeTree.gen.ts
-backend/internal/db/generated/
+# Note: backend/internal/db/generated/ is COMMITTED (deviation from arch spec — see Story 1.5 Dev Notes)
+# so fresh clones build without an extra `sqlc generate` step.
 
 # OS / IDE
 .DS_Store

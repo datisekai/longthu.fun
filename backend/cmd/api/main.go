@@ -1,16 +1,16 @@
 package main
 
 import (
+	"database/sql"
 	"log/slog"
-	"net/http"
 	"os"
+	"strings"
+	"time"
 
-	"github.com/gin-contrib/cors"
-	"github.com/gin-contrib/gzip"
-	"github.com/gin-contrib/requestid"
-	"github.com/gin-gonic/gin"
+	_ "github.com/go-sql-driver/mysql"
 
 	"github.com/datisekai/longthu.fun/backend/internal/config"
+	"github.com/datisekai/longthu.fun/backend/internal/server"
 )
 
 // gitSHA is overridden at build time:
@@ -20,31 +20,43 @@ var gitSHA = "dev"
 
 func main() {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
-	cfg := config.Load()
 
-	gin.SetMode(gin.ReleaseMode)
-	r := gin.New()
-	r.Use(gin.Recovery())
-	r.Use(requestid.New())
-	r.Use(gzip.Gzip(gzip.DefaultCompression))
-	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{cfg.AppBaseURL},
-		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Content-Type", "Authorization", "X-Idempotency-Key"},
-		AllowCredentials: true,
-	}))
+	cfg, err := config.Load()
+	if err != nil {
+		slog.Error("config", "error", err)
+		os.Exit(1)
+	}
 
-	r.GET("/healthz", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"status":  "ok",
-			"version": gitSHA,
-		})
-	})
+	db, err := openDB(cfg.DatabaseURL)
+	if err != nil {
+		slog.Error("db open", "error", err)
+		os.Exit(1)
+	}
+	defer db.Close()
+	if err := db.Ping(); err != nil {
+		slog.Error("db ping", "error", err)
+		os.Exit(1)
+	}
 
-	addr := ":" + cfg.Port
-	slog.Info("server starting", "addr", addr, "version", gitSHA)
-	if err := r.Run(addr); err != nil {
+	srv := server.New(cfg, db, gitSHA)
+	slog.Info("server starting", "port", cfg.Port, "version", gitSHA)
+	if err := srv.Run(); err != nil {
 		slog.Error("server failed", "error", err)
 		os.Exit(1)
 	}
+}
+
+// openDB opens a MySQL connection from a DATABASE_URL. The Makefile / dev
+// scripts use the `mysql://` prefix golang-migrate requires; the Go SQL
+// driver expects the bare DSN, so we strip the prefix here.
+func openDB(rawDSN string) (*sql.DB, error) {
+	dsn := strings.TrimPrefix(rawDSN, "mysql://")
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		return nil, err
+	}
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(10)
+	db.SetConnMaxLifetime(5 * time.Minute)
+	return db, nil
 }
