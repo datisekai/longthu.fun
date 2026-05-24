@@ -10,6 +10,9 @@ import (
 )
 
 type Querier interface {
+	// Host-scoped lookup. Returning sql.ErrNoRows for both "missing" and
+	// "belongs to another host" preserves tenant isolation.
+	GetGroupByIDForHost(ctx context.Context, arg GetGroupByIDForHostParams) (Group, error)
 	// Used at login. Returns sql.ErrNoRows when email is not registered.
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	// Used by the session middleware to enrich the request context with current tier.

@@ -12,6 +12,7 @@ import (
 
 	"github.com/datisekai/longthu.fun/backend/internal/auth"
 	"github.com/datisekai/longthu.fun/backend/internal/config"
+	"github.com/datisekai/longthu.fun/backend/internal/groups"
 )
 
 // Server bundles the wired-up router + its dependencies.
@@ -54,6 +55,10 @@ func New(cfg *config.Config, db *sql.DB, gitSHA string) *Server {
 	v1Auth := r.Group("/api/v1")
 	v1Auth.Use(auth.SessionMiddleware([]byte(cfg.JWTSecret)))
 	authHandler.RegisterMeRoute(v1Auth) // /auth/me — needs middleware
+
+	groupsSvc := groups.NewService(db)
+	groupsHandler := groups.NewHandler(groupsSvc)
+	groupsHandler.RegisterRoutes(v1Auth)
 
 	return &Server{cfg: cfg, db: db, router: r}
 }
