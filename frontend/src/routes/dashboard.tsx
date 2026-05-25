@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, Link } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { formatMoney } from '@/lib/money';
 import { vi } from '@/locales/vi';
@@ -42,20 +42,23 @@ interface AuthUser {
 }
 
 // Action banner variants (Story 3.3)
-function ActionBanner({ sessionCount, tier, suspectedCount }: {
+function ActionBanner({ sessionCount, tier, suspectedCount, hasGroup }: {
   sessionCount: number;
   tier: string;
   suspectedCount: number;
+  hasGroup: boolean;
 }) {
-  // No sessions yet
+  // No sessions yet — guide to create group first
   if (sessionCount === 0) {
     return (
       <div className="rounded-md border border-primary/40 bg-primary/10 p-4 text-center">
         <p className="text-muted-foreground">Chưa có buổi nào hết á 🏸</p>
         <p className="mt-1 text-sm">Đánh xong nhớ tạo session liền nha</p>
-        <Button variant="primary" size="lg" className="mt-3 w-full">
-          + Tạo session
-        </Button>
+        <Link to="/onboarding">
+          <Button variant="primary" size="lg" className="mt-3 w-full">
+            {hasGroup ? '+ Tạo session' : '+ Tạo nhóm & session'}
+          </Button>
+        </Link>
       </div>
     );
   }
@@ -66,9 +69,11 @@ function ActionBanner({ sessionCount, tier, suspectedCount }: {
       <div className="rounded-md border border-accent/40 bg-accent/10 p-4 text-center">
         <p className="text-muted-foreground">Còn phải tick tay từng người sao?</p>
         <p className="mt-1 text-sm font-medium text-accent">Lên PRO để app tự khớp 🚀</p>
-        <Button variant="accent" size="lg" className="mt-3 w-full">
-          Xem PRO 50k/tháng
-        </Button>
+        <Link to="/settings">
+          <Button variant="accent" size="lg" className="mt-3 w-full">
+            Xem PRO 50k/tháng
+          </Button>
+        </Link>
       </div>
     );
   }
@@ -79,11 +84,11 @@ function ActionBanner({ sessionCount, tier, suspectedCount }: {
       <div className="rounded-md border border-yellow-500/40 bg-yellow-500/10 p-4 text-center">
         <p className="text-muted-foreground">Có {suspectedCount} payment cần xác nhận</p>
         <p className="mt-1 text-sm">Vào xem và xử lý ngay nào</p>
-        <a href="/dashboard/suspected">
+        <Link to="/dashboard/suspected">
           <Button variant="primary" size="lg" className="mt-3 w-full">
             Xem ngay
           </Button>
-        </a>
+        </Link>
       </div>
     );
   }
@@ -139,6 +144,7 @@ function DashboardPage() {
         sessionCount={dash.sessionCount}
         tier={tier}
         suspectedCount={dash.suspectedCount}
+        hasGroup={dash.groupCount > 0}
       />
 
       {/* Money strip */}
@@ -221,9 +227,11 @@ function DashboardPage() {
 
       {/* Quick actions */}
       <div className="flex gap-2">
-        <Button variant="primary" size="lg" className="flex-1">
-          + Tạo session
-        </Button>
+        <Link to="/onboarding" className="flex-1">
+          <Button variant="primary" size="lg" className="w-full">
+            + Tạo session
+          </Button>
+        </Link>
       </div>
     </main>
   );

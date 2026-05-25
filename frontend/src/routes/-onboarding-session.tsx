@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { ApiError, apiRequest } from '@/lib/api';
 import { formatMoney } from '@/lib/money';
@@ -68,11 +68,19 @@ export function SessionDraftStep({ groupId, onSaved, onComplete }: SessionDraftS
   const [pendingError, setPendingError] = useState<string | null>(null);
 
   // Load active roster for the participant picker (AC5).
+  // Pre-populate participantIDs so the Save button is immediately enabled.
   const playersQuery = useQuery({
     queryKey: ['groups', groupId, 'players'],
     queryFn: () =>
       apiRequest<{ players: Player[] }>(`/api/v1/groups/${groupId}/players`).then((r) => r.players),
   });
+
+  // Once players load, pre-select everyone so the user doesn't have to tick manually.
+  useEffect(() => {
+    if (playersQuery.data && participantIDs.length === 0) {
+      setParticipantIDs(playersQuery.data.map((p) => p.id));
+    }
+  }, [playersQuery.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Mutations.
   const createDraft = useMutation({
