@@ -17,6 +17,7 @@ import (
 	"github.com/datisekai/longthu.fun/backend/internal/players"
 	"github.com/datisekai/longthu.fun/backend/internal/paymentintents"
 	"github.com/datisekai/longthu.fun/backend/internal/public"
+	"github.com/datisekai/longthu.fun/backend/internal/ratelimit"
 	"github.com/datisekai/longthu.fun/backend/internal/sessions"
 )
 
@@ -55,6 +56,7 @@ func New(cfg *config.Config, db *sql.DB, gitSHA string) *Server {
 	authHandler := auth.NewHandler(authSvc, []byte(cfg.JWTSecret), cfg.AppBaseURL)
 
 	v1Public := r.Group("/api/v1")
+	v1Public.Use(ratelimit.Middleware())
 	authHandler.RegisterAuthRoutes(v1Public) // register / login / logout — no middleware
 
 	v1Auth := r.Group("/api/v1")
