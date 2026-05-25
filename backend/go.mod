@@ -9,6 +9,7 @@ require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/go-sql-driver/mysql v1.10.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
+	github.com/payOSHQ/payos-lib-golang/v2 v2.0.1
 	golang.org/x/crypto v0.48.0
 )
 

@@ -21,6 +21,10 @@ services:
       SECRETS_MASTER_KEY: dev-master-key-change-in-prod
       APP_BASE_URL: http://localhost:5173
       PORT: '8080'
+      # payOS credentials (get from https://my.payos.vn)
+      PAYOS_CLIENT_ID: ${PAYOS_CLIENT_ID:-}
+      PAYOS_API_KEY: ${PAYOS_API_KEY:-}
+      PAYOS_CHECKSUM_KEY: ${PAYOS_CHECKSUM_KEY:-}
     depends_on:
       mysql:
         condition: service_healthy
