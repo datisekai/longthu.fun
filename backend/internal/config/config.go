@@ -12,10 +12,12 @@ import (
 
 // Config holds typed runtime config.
 type Config struct {
-	Port        string
-	AppBaseURL  string
-	DatabaseURL string
-	JWTSecret   string
+	Port          string
+	AppBaseURL    string
+	DatabaseURL   string
+	JWTSecret     string
+	AdminEmail    string
+	AdminPassword string
 }
 
 // Load reads env vars and returns a populated Config. Returns an error on
@@ -33,6 +35,8 @@ func Load() (*Config, error) {
 	if cfg.JWTSecret == "" {
 		return nil, fmt.Errorf("config.Load: JWT_SECRET is required (generate via openssl rand -hex 32)")
 	}
+	cfg.AdminEmail = getenv("ADMIN_EMAIL", "")
+	cfg.AdminPassword = getenv("ADMIN_PASSWORD", "")
 	return cfg, nil
 }
 
