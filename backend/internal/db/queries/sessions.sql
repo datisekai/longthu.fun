@@ -94,3 +94,13 @@ WHERE sc.id = ? AND g.host_user_id = ?;
 UPDATE session_charges
 SET status = ?, paid_at = ?, paid_via = ?
 WHERE id = ?;
+
+-- Story 4.1: Edit finalized session
+-- name: UpdateSessionFinalizedMeta :exec
+UPDATE sessions
+SET title = ?, location = ?, `date` = ?
+WHERE id = ? AND status = 'finalized';
+
+-- Story 4.4: Waive charge
+-- name: UpdateChargeWaived :exec
+UPDATE session_charges SET status = 'waived' WHERE id = ?;

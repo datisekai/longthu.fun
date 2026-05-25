@@ -106,11 +106,15 @@ type Querier interface {
 	UpdateChargeStatus(ctx context.Context, arg UpdateChargeStatusParams) error
 	// Mark charge as paid (manual confirm) or revert to unpaid (undo).
 	UpdateChargeStatusManual(ctx context.Context, arg UpdateChargeStatusManualParams) error
+	// Story 4.4: Waive charge
+	UpdateChargeWaived(ctx context.Context, id uint64) error
 	UpdatePaymentIntentStatus(ctx context.Context, arg UpdatePaymentIntentStatusParams) error
 	// Updates date/title/location on a draft session (host edits before finalize).
 	UpdateSessionDraftMeta(ctx context.Context, arg UpdateSessionDraftMetaParams) error
 	// Sets the session to finalized + records share_code + total_cost + finalized_at.
 	UpdateSessionFinalize(ctx context.Context, arg UpdateSessionFinalizeParams) error
+	// Story 4.1: Edit finalized session
+	UpdateSessionFinalizedMeta(ctx context.Context, arg UpdateSessionFinalizedMetaParams) error
 }
 
 var _ Querier = (*Queries)(nil)

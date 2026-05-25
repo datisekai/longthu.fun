@@ -400,6 +400,16 @@ func (q *Queries) UpdateChargeStatusManual(ctx context.Context, arg UpdateCharge
 	return err
 }
 
+const updateChargeWaived = `-- name: UpdateChargeWaived :exec
+UPDATE session_charges SET status = 'waived' WHERE id = ?
+`
+
+// Story 4.4: Waive charge
+func (q *Queries) UpdateChargeWaived(ctx context.Context, id uint64) error {
+	_, err := q.db.ExecContext(ctx, updateChargeWaived, id)
+	return err
+}
+
 const updateSessionDraftMeta = `-- name: UpdateSessionDraftMeta :exec
 UPDATE sessions
 SET ` + "`" + `date` + "`" + ` = ?, title = ?, location = ?
@@ -443,6 +453,30 @@ func (q *Queries) UpdateSessionFinalize(ctx context.Context, arg UpdateSessionFi
 		arg.ShareCode,
 		arg.TotalCost,
 		arg.FinalizedAt,
+		arg.ID,
+	)
+	return err
+}
+
+const updateSessionFinalizedMeta = `-- name: UpdateSessionFinalizedMeta :exec
+UPDATE sessions
+SET title = ?, location = ?, ` + "`" + `date` + "`" + ` = ?
+WHERE id = ? AND status = 'finalized'
+`
+
+type UpdateSessionFinalizedMetaParams struct {
+	Title    sql.NullString
+	Location sql.NullString
+	Date     time.Time
+	ID       uint64
+}
+
+// Story 4.1: Edit finalized session
+func (q *Queries) UpdateSessionFinalizedMeta(ctx context.Context, arg UpdateSessionFinalizedMetaParams) error {
+	_, err := q.db.ExecContext(ctx, updateSessionFinalizedMeta,
+		arg.Title,
+		arg.Location,
+		arg.Date,
 		arg.ID,
 	)
 	return err
