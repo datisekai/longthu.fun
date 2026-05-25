@@ -108,6 +108,8 @@ type Querier interface {
 	UpdateChargeStatusManual(ctx context.Context, arg UpdateChargeStatusManualParams) error
 	// Story 4.4: Waive charge
 	UpdateChargeWaived(ctx context.Context, id uint64) error
+	// Story 5.2: Set Telegram chat ID
+	UpdateGroupTelegramChatID(ctx context.Context, arg UpdateGroupTelegramChatIDParams) error
 	UpdatePaymentIntentStatus(ctx context.Context, arg UpdatePaymentIntentStatusParams) error
 	// Updates date/title/location on a draft session (host edits before finalize).
 	UpdateSessionDraftMeta(ctx context.Context, arg UpdateSessionDraftMetaParams) error

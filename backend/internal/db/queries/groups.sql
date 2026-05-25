@@ -14,3 +14,7 @@ LIMIT 1;
 -- (vestigial per Story 1.2 §Completion Notes #2).
 INSERT INTO `groups` (host_user_id, name, default_bank_account_id)
 VALUES (?, ?, ?);
+
+-- Story 5.2: Set Telegram chat ID
+-- name: UpdateGroupTelegramChatID :exec
+UPDATE `groups` SET telegram_chat_id = ? WHERE id = ? AND host_user_id = ?;

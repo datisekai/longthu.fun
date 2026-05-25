@@ -63,3 +63,19 @@ type InsertGroupParams struct {
 func (q *Queries) InsertGroup(ctx context.Context, arg InsertGroupParams) (sql.Result, error) {
 	return q.db.ExecContext(ctx, insertGroup, arg.HostUserID, arg.Name, arg.DefaultBankAccountID)
 }
+
+const updateGroupTelegramChatID = `-- name: UpdateGroupTelegramChatID :exec
+UPDATE ` + "`" + `groups` + "`" + ` SET telegram_chat_id = ? WHERE id = ? AND host_user_id = ?
+`
+
+type UpdateGroupTelegramChatIDParams struct {
+	TelegramChatID sql.NullInt64
+	ID             uint64
+	HostUserID     uint64
+}
+
+// Story 5.2: Set Telegram chat ID
+func (q *Queries) UpdateGroupTelegramChatID(ctx context.Context, arg UpdateGroupTelegramChatIDParams) error {
+	_, err := q.db.ExecContext(ctx, updateGroupTelegramChatID, arg.TelegramChatID, arg.ID, arg.HostUserID)
+	return err
+}
