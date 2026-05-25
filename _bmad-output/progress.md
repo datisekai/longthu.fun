@@ -4,8 +4,12 @@
 
 - US 1.5 — Host registration and login — completed in commit `4a520f4`.
 - US 1.6 — Tenant isolation middleware — completed in commit `7e58cdc`.
-- US 1.7 — Founder adds first Bank Account — completed in current workflow checkpoint.
+- US 1.7 — Founder adds first Bank Account — completed in commit `309f357`.
+- US 1.8 — Founder creates first Group — completed in commit `4c34151`.
+- US 1.9 — Founder adds Players to the Group — completed in commit `34b3e1e`.
+- US 1.10 — Founder creates Session draft with cost items + participants — completed in commit `a8a1c0a`.
+- US 1.11 — Founder finalizes Session (mint share code, generate Charges) — completed in commit `TBD`.
 
 ## Current Position
 
-- Next remaining story: US 1.8 — Founder creates first Group.
+- Next remaining story: US 1.12 — Founder copies share message and pastes to chat.

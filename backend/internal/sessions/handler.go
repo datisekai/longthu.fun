@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -12,11 +13,12 @@ import (
 )
 
 type Handler struct {
-	svc *Service
+	svc        *Service
+	appBaseURL string
 }
 
-func NewHandler(svc *Service) *Handler {
-	return &Handler{svc: svc}
+func NewHandler(svc *Service, appBaseURL string) *Handler {
+	return &Handler{svc: svc, appBaseURL: strings.TrimRight(appBaseURL, "/")}
 }
 
 func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
@@ -25,6 +27,7 @@ func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
 	r.POST("/sessions/:sessionId/cost-items", h.handleAddCostItem)
 	r.DELETE("/sessions/:sessionId/cost-items/:itemId", h.handleRemoveCostItem)
 	r.PUT("/sessions/:sessionId/participants", h.handleSetParticipants)
+	r.POST("/sessions/:sessionId/finalize", h.handleFinalize)
 }
 
 type createDraftReq struct {
@@ -176,6 +179,47 @@ func (h *Handler) handleRemoveCostItem(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusNoContent)
+}
+
+func (h *Handler) handleFinalize(c *gin.Context) {
+	hostID, ok := tenant.HostID(c)
+	if !ok {
+		httpx.Reply(c, http.StatusUnauthorized, "Chưa đăng nhập", "")
+		return
+	}
+	sessionID, err := strconv.ParseUint(c.Param("sessionId"), 10, 64)
+	if err != nil || sessionID == 0 {
+		httpx.Reply(c, http.StatusNotFound, "Not found", "")
+		return
+	}
+	result, err := h.svc.Finalize(c.Request.Context(), hostID, sessionID)
+	if err == nil {
+		c.JSON(http.StatusOK, gin.H{
+			"session":   result.Session,
+			"charges":   result.Charges,
+			"shareCode": result.ShareCode,
+			"shareUrl":  h.appBaseURL + "/g/" + result.ShareCode,
+		})
+		return
+	}
+	switch {
+	case errors.Is(err, ErrSessionNotFound):
+		httpx.Reply(c, http.StatusNotFound, "Not found", "")
+	case errors.Is(err, ErrNoBankAccount):
+		httpx.ReplyValidation(c, "Chưa có tài khoản nhận tiền", []httpx.FieldError{
+			{Field: "bankAccount", Message: "Bạn cần thêm tài khoản nhận tiền trước khi chốt buổi."},
+		})
+	case errors.Is(err, ErrNoCostItems):
+		httpx.ReplyValidation(c, "Chưa đủ thông tin", []httpx.FieldError{
+			{Field: "costItems", Message: "Cần ít nhất 1 khoản chi để chốt buổi"},
+		})
+	case errors.Is(err, ErrParticipantsEmpty):
+		httpx.ReplyValidation(c, "Chưa có người chơi", []httpx.FieldError{
+			{Field: "participants", Message: "Cần ít nhất 1 người chơi để chốt buổi"},
+		})
+	default:
+		httpx.Reply(c, http.StatusInternalServerError, "Không chốt được buổi", "")
+	}
 }
 
 type setParticipantsReq struct {

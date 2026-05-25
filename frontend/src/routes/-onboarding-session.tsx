@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { ApiError, apiRequest } from '@/lib/api';
 import { formatMoney } from '@/lib/money';
 import { vi } from '@/locales/vi';
-import type { CostItem, CostItemType, Player, Session } from '@/types/api';
+import type { CostItem, CostItemType, FinalizeResponse, Player, Session } from '@/types/api';
 
 const COST_TYPES: CostItemType[] = ['court', 'shuttle', 'water', 'other', 'discount'];
 
@@ -47,9 +47,10 @@ export function computeSplit(items: CostItem[], participantCount: number): Split
 interface SessionDraftStepProps {
   groupId: number;
   onSaved?: (session: Session) => void;
+  onComplete?: (result: FinalizeResponse) => void;
 }
 
-export function SessionDraftStep({ groupId, onSaved }: SessionDraftStepProps) {
+export function SessionDraftStep({ groupId, onSaved, onComplete }: SessionDraftStepProps) {
   const qc = useQueryClient();
   const [date, setDate] = useState(todayInVN());
   const [title, setTitle] = useState('');
@@ -57,6 +58,7 @@ export function SessionDraftStep({ groupId, onSaved }: SessionDraftStepProps) {
   const [costItems, setCostItems] = useState<CostItem[]>([]);
   const [participantIDs, setParticipantIDs] = useState<number[]>([]);
   const [sessionId, setSessionId] = useState<number | null>(null);
+  const [finalizeResult, setFinalizeResult] = useState<FinalizeResponse | null>(null);
   const [pendingItem, setPendingItem] = useState<{ type: CostItemType; label: string; amount: string }>({
     type: 'court',
     label: '',
@@ -98,6 +100,11 @@ export function SessionDraftStep({ groupId, onSaved }: SessionDraftStepProps) {
         `/api/v1/sessions/${vars.sessionId}/participants`,
         { method: 'PUT', body: { playerIds: vars.playerIds } },
       ),
+  });
+
+  const finalize = useMutation({
+    mutationFn: (vars: { sessionId: number }) =>
+      apiRequest<FinalizeResponse>(`/api/v1/sessions/${vars.sessionId}/finalize`, { method: 'POST' }),
   });
 
   const preview = useMemo(() => computeSplit(costItems, participantIDs.length), [costItems, participantIDs]);
@@ -165,12 +172,50 @@ export function SessionDraftStep({ groupId, onSaved }: SessionDraftStepProps) {
     });
   }
 
+  async function handleFinalize() {
+    const sid = await ensureDraft();
+    if (participantIDs.length > 0) {
+      await setParticipantsMut.mutateAsync({ sessionId: sid, playerIds: participantIDs });
+    }
+    try {
+      const result = await finalize.mutateAsync({ sessionId: sid });
+      setFinalizeResult(result);
+      qc.invalidateQueries({ queryKey: ['sessions', sid] });
+      onComplete?.(result);
+    } catch {
+      // Error is handled by finalize.isError
+    }
+  }
+
+  async function handleCopyLink() {
+    if (!finalizeResult) return;
+    await navigator.clipboard.writeText(finalizeResult.shareUrl);
+  }
+
+  function getShareMessage(): string {
+    if (!finalizeResult) return '';
+    const dateStr = finalizeResult.session.date
+      ? new Date(finalizeResult.session.date + 'T00:00:00+07:00').toLocaleDateString('vi-VN', {
+          day: '2-digit',
+          month: '2-digit',
+        })
+      : '';
+    return `🏸 Bill cầu lông ${dateStr} có rồi nha mấy con vợ
+Tổng: ${formatMoney(finalizeResult.session.totalCost)} · Đã trả: 0đ · Còn nợ: ${formatMoney(finalizeResult.session.totalCost)}
+Vào link tự xem tên + QR, đỡ phải ping admin:
+${finalizeResult.shareUrl}`;
+  }
+
+  async function handleCopyMessage() {
+    await navigator.clipboard.writeText(getShareMessage());
+  }
+
   const mutationError = (() => {
-    for (const m of [createDraft, addItem, removeItem, setParticipantsMut]) {
+    for (const m of [createDraft, addItem, removeItem, setParticipantsMut, finalize]) {
       if (m.error instanceof ApiError) {
         return m.error.fieldError('amount') ?? m.error.fieldError('playerIds') ?? m.error.problem.title;
       }
-      if (m.isError) return vi.onboarding.session.errors.generic;
+      if (m.isError) return vi.onboarding.session.finalizeError;
     }
     return undefined;
   })();
@@ -339,21 +384,61 @@ export function SessionDraftStep({ groupId, onSaved }: SessionDraftStepProps) {
           </p>
         ) : null}
 
-        <Button
-          type="button"
-          size="lg"
-          className="w-full"
-          disabled={!canSave || setParticipantsMut.isPending || createDraft.isPending}
-          onClick={handleSave}
-        >
-          {setParticipantsMut.isPending || createDraft.isPending
-            ? vi.onboarding.session.saving
-            : vi.onboarding.session.saveDraft}
-        </Button>
+        {finalizeResult ? (
+          // Story 1.11 confirmation panel
+          <section className="space-y-4 rounded-md border border-primary/40 bg-primary/10 p-4">
+            <div className="space-y-1 text-center">
+              <h2 className="text-xl font-bold text-primary">{vi.onboarding.session.confirmationTitle}</h2>
+              <p className="text-sm text-muted-foreground">{vi.onboarding.session.confirmationSubtitle}</p>
+            </div>
+            <div className="rounded-md bg-background p-3 text-center">
+              <p className="text-xs text-muted-foreground">{vi.onboarding.session.shareUrlLabel}</p>
+              <p className="mt-1 text-2xl font-bold font-display text-primary">{finalizeResult.shareCode}</p>
+              <p className="text-xs text-muted-foreground">{finalizeResult.shareUrl}</p>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="secondary" size="lg" className="flex-1" onClick={handleCopyLink}>
+                {vi.onboarding.session.copyLink}
+              </Button>
+              <Button variant="primary" size="lg" className="flex-1" onClick={handleCopyMessage}>
+                {vi.onboarding.session.copyMessage}
+              </Button>
+            </div>
+          </section>
+        ) : (
+          <>
+            <Button
+              type="button"
+              size="lg"
+              className="w-full"
+              disabled={!canSave || setParticipantsMut.isPending || createDraft.isPending}
+              onClick={handleSave}
+            >
+              {setParticipantsMut.isPending || createDraft.isPending
+                ? vi.onboarding.session.saving
+                : vi.onboarding.session.saveDraft}
+            </Button>
 
-        {canSave ? (
-          <p className="text-center text-xs text-muted-foreground">{vi.onboarding.session.readyForFinalize}</p>
-        ) : null}
+            {canSave ? (
+              <Button
+                type="button"
+                variant="primary"
+                size="lg"
+                className="w-full"
+                disabled={!canSave || finalize.isPending || setParticipantsMut.isPending || createDraft.isPending}
+                onClick={handleFinalize}
+              >
+                {finalize.isPending
+                  ? vi.onboarding.session.finalizing
+                  : vi.onboarding.session.finalize}
+              </Button>
+            ) : null}
+
+            {canSave ? (
+              <p className="text-center text-xs text-muted-foreground">{vi.onboarding.session.readyForFinalize}</p>
+            ) : null}
+          </>
+        )}
       </div>
     </section>
   );

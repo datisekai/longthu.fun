@@ -58,3 +58,25 @@ ORDER BY id;
 SELECT COUNT(*)
 FROM players
 WHERE group_id = ? AND id IN (sqlc.slice('player_ids')) AND is_active = 1;
+
+-- name: InsertSessionCharge :execresult
+-- One row per participant at finalize time. Story 1.11.
+INSERT INTO session_charges (session_id, player_id, amount, status)
+VALUES (?, ?, ?, 'unpaid');
+
+-- name: ListSessionCharges :many
+-- Returns all charges for a session, ordered by id (insertion order).
+SELECT id, session_id, player_id, amount, status, paid_at, paid_via, description, created_at, updated_at
+FROM session_charges
+WHERE session_id = ?
+ORDER BY id;
+
+-- name: UpdateSessionFinalize :exec
+-- Sets the session to finalized + records share_code + total_cost + finalized_at.
+UPDATE sessions
+SET status = 'finalized', share_code = ?, total_cost = ?, finalized_at = ?
+WHERE id = ?;
+
+-- name: SessionShareCodeExists :one
+-- shortcode.GenerateUnique callback against sessions.share_code.
+SELECT EXISTS(SELECT 1 FROM sessions WHERE share_code = ?) AS found;

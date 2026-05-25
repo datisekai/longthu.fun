@@ -46,6 +46,8 @@ type Querier interface {
 	// Creates a draft session. status defaults to 'draft' via the table default,
 	// but we set it explicitly for grep-ability.
 	InsertSession(ctx context.Context, arg InsertSessionParams) (sql.Result, error)
+	// One row per participant at finalize time. Story 1.11.
+	InsertSessionCharge(ctx context.Context, arg InsertSessionChargeParams) (sql.Result, error)
 	// Adds a cost item to a session draft.
 	InsertSessionCostItem(ctx context.Context, arg InsertSessionCostItemParams) (sql.Result, error)
 	// Second half of the participant-replace tx. Weight defaults to 1.00.
@@ -60,14 +62,20 @@ type Querier interface {
 	// (the unique index uk_players_group_display_name would block at INSERT time
 	// anyway, but surfacing the conflict earlier gives a friendlier error).
 	ListPlayerDisplayNamesInGroup(ctx context.Context, groupID uint64) ([]string, error)
+	// Returns all charges for a session, ordered by id (insertion order).
+	ListSessionCharges(ctx context.Context, sessionID uint64) ([]SessionCharge, error)
 	// Returns all cost items for a session in insertion order.
 	ListSessionCostItems(ctx context.Context, sessionID uint64) ([]ListSessionCostItemsRow, error)
 	// Returns the player IDs participating in a session.
 	ListSessionParticipants(ctx context.Context, sessionID uint64) ([]ListSessionParticipantsRow, error)
 	// Used by shortcode.GenerateUnique's `exists` callback.
 	PlayerExistsByPublicCode(ctx context.Context, publicCode string) (bool, error)
+	// shortcode.GenerateUnique callback against sessions.share_code.
+	SessionShareCodeExists(ctx context.Context, shareCode sql.NullString) (bool, error)
 	// Updates date/title/location on a draft session (host edits before finalize).
 	UpdateSessionDraftMeta(ctx context.Context, arg UpdateSessionDraftMetaParams) error
+	// Sets the session to finalized + records share_code + total_cost + finalized_at.
+	UpdateSessionFinalize(ctx context.Context, arg UpdateSessionFinalizeParams) error
 }
 
 var _ Querier = (*Queries)(nil)

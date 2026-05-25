@@ -131,6 +131,22 @@ func (q *Queries) InsertSession(ctx context.Context, arg InsertSessionParams) (s
 	)
 }
 
+const insertSessionCharge = `-- name: InsertSessionCharge :execresult
+INSERT INTO session_charges (session_id, player_id, amount, status)
+VALUES (?, ?, ?, 'unpaid')
+`
+
+type InsertSessionChargeParams struct {
+	SessionID uint64
+	PlayerID  uint64
+	Amount    int64
+}
+
+// One row per participant at finalize time. Story 1.11.
+func (q *Queries) InsertSessionCharge(ctx context.Context, arg InsertSessionChargeParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, insertSessionCharge, arg.SessionID, arg.PlayerID, arg.Amount)
+}
+
 const insertSessionCostItem = `-- name: InsertSessionCostItem :execresult
 INSERT INTO session_cost_items (session_id, type, label, amount, is_included_in_split)
 VALUES (?, ?, ?, ?, ?)
@@ -169,6 +185,48 @@ type InsertSessionParticipantParams struct {
 func (q *Queries) InsertSessionParticipant(ctx context.Context, arg InsertSessionParticipantParams) error {
 	_, err := q.db.ExecContext(ctx, insertSessionParticipant, arg.SessionID, arg.PlayerID)
 	return err
+}
+
+const listSessionCharges = `-- name: ListSessionCharges :many
+SELECT id, session_id, player_id, amount, status, paid_at, paid_via, description, created_at, updated_at
+FROM session_charges
+WHERE session_id = ?
+ORDER BY id
+`
+
+// Returns all charges for a session, ordered by id (insertion order).
+func (q *Queries) ListSessionCharges(ctx context.Context, sessionID uint64) ([]SessionCharge, error) {
+	rows, err := q.db.QueryContext(ctx, listSessionCharges, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SessionCharge{}
+	for rows.Next() {
+		var i SessionCharge
+		if err := rows.Scan(
+			&i.ID,
+			&i.SessionID,
+			&i.PlayerID,
+			&i.Amount,
+			&i.Status,
+			&i.PaidAt,
+			&i.PaidVia,
+			&i.Description,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listSessionCostItems = `-- name: ListSessionCostItems :many
@@ -265,6 +323,18 @@ func (q *Queries) ListSessionParticipants(ctx context.Context, sessionID uint64)
 	return items, nil
 }
 
+const sessionShareCodeExists = `-- name: SessionShareCodeExists :one
+SELECT EXISTS(SELECT 1 FROM sessions WHERE share_code = ?) AS found
+`
+
+// shortcode.GenerateUnique callback against sessions.share_code.
+func (q *Queries) SessionShareCodeExists(ctx context.Context, shareCode sql.NullString) (bool, error) {
+	row := q.db.QueryRowContext(ctx, sessionShareCodeExists, shareCode)
+	var found bool
+	err := row.Scan(&found)
+	return found, err
+}
+
 const updateSessionDraftMeta = `-- name: UpdateSessionDraftMeta :exec
 UPDATE sessions
 SET ` + "`" + `date` + "`" + ` = ?, title = ?, location = ?
@@ -284,6 +354,30 @@ func (q *Queries) UpdateSessionDraftMeta(ctx context.Context, arg UpdateSessionD
 		arg.Date,
 		arg.Title,
 		arg.Location,
+		arg.ID,
+	)
+	return err
+}
+
+const updateSessionFinalize = `-- name: UpdateSessionFinalize :exec
+UPDATE sessions
+SET status = 'finalized', share_code = ?, total_cost = ?, finalized_at = ?
+WHERE id = ?
+`
+
+type UpdateSessionFinalizeParams struct {
+	ShareCode   sql.NullString
+	TotalCost   int64
+	FinalizedAt sql.NullTime
+	ID          uint64
+}
+
+// Sets the session to finalized + records share_code + total_cost + finalized_at.
+func (q *Queries) UpdateSessionFinalize(ctx context.Context, arg UpdateSessionFinalizeParams) error {
+	_, err := q.db.ExecContext(ctx, updateSessionFinalize,
+		arg.ShareCode,
+		arg.TotalCost,
+		arg.FinalizedAt,
 		arg.ID,
 	)
 	return err

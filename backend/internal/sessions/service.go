@@ -1,6 +1,6 @@
-// Package sessions owns the Session draft lifecycle: create draft, add cost
-// items, set participants. Finalize lives in Story 1.11 (separate
-// transactional path that mints charges + share code).
+// Package sessions owns the Session lifecycle: draft (create / add cost
+// items / set participants — Story 1.10) and finalize (mint share code,
+// generate Charges, audit — Story 1.11).
 package sessions
 
 import (
@@ -11,9 +11,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/datisekai/longthu.fun/backend/internal/audit"
 	dbpkg "github.com/datisekai/longthu.fun/backend/internal/db"
 	dbgen "github.com/datisekai/longthu.fun/backend/internal/db/generated"
+	"github.com/datisekai/longthu.fun/backend/internal/shortcode"
 )
+
+// shareCodeLength per epics §1.11: GroupShare codes are 6 Crockford-base32
+// chars (~1B keyspace; comfortable with the 10-retry GenerateUnique loop).
+const shareCodeLength = 6
 
 // CostItemType matches the session_cost_items.type CHECK constraint.
 type CostItemType string
@@ -71,6 +77,8 @@ var (
 	ErrInvalidCostItemLabel     = errors.New("sessions: invalid cost item label")
 	ErrParticipantsEmpty        = errors.New("sessions: at least one participant required")
 	ErrParticipantOutsideRoster = errors.New("sessions: participant not in group roster")
+	ErrNoBankAccount            = errors.New("sessions: host has no bank account; cannot finalize")
+	ErrNoCostItems              = errors.New("sessions: cannot finalize without at least 1 cost item")
 )
 
 type Service struct {
@@ -304,6 +312,213 @@ func (s *Service) GetDraftWithDetails(ctx context.Context, hostID uint64, sessio
 		out.Participants = append(out.Participants, PublicParticipant{PlayerID: p.PlayerID})
 	}
 	return out, nil
+}
+
+// PublicCharge is the response shape for a finalized session_charges row.
+type PublicCharge struct {
+	ID        uint64  `json:"id"`
+	SessionID uint64  `json:"sessionId"`
+	PlayerID  uint64  `json:"playerId"`
+	Amount    int64   `json:"amount"`
+	Status    string  `json:"status"`
+	PaidVia   *string `json:"paidVia,omitempty"`
+}
+
+// FinalizeResult is what the handler returns on a successful Finalize call
+// (or on idempotent re-finalize).
+type FinalizeResult struct {
+	Session   PublicSession  `json:"session"`
+	Charges   []PublicCharge `json:"charges"`
+	ShareCode string         `json:"shareCode"`
+}
+
+// Finalize mints share_code + generates Charges + writes audit, all in one tx.
+// Idempotent: if the session is already finalized, returns the existing
+// snapshot without re-executing the tx.
+//
+// Bank gate: requires the host to have at least one bank account.
+func (s *Service) Finalize(ctx context.Context, hostID uint64, sessionID uint64) (FinalizeResult, error) {
+	q := dbgen.New(s.db)
+
+	// Tenant + existence check.
+	sess, err := q.GetSessionByIDForHost(ctx, dbgen.GetSessionByIDForHostParams{
+		ID: sessionID, HostUserID: hostID,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return FinalizeResult{}, ErrSessionNotFound
+		}
+		return FinalizeResult{}, fmt.Errorf("sessions.Finalize: session check: %w", err)
+	}
+
+	// Idempotent short-circuit.
+	if sess.Status == "finalized" {
+		charges, err := q.ListSessionCharges(ctx, sessionID)
+		if err != nil {
+			return FinalizeResult{}, fmt.Errorf("sessions.Finalize: re-read charges: %w", err)
+		}
+		out := FinalizeResult{Session: toPublicSession(sess)}
+		if sess.ShareCode.Valid {
+			out.ShareCode = sess.ShareCode.String
+		}
+		for _, c := range charges {
+			out.Charges = append(out.Charges, toPublicCharge(c))
+		}
+		return out, nil
+	}
+
+	// Bank gate.
+	bankCount, err := q.CountBankAccountsForHost(ctx, hostID)
+	if err != nil {
+		return FinalizeResult{}, fmt.Errorf("sessions.Finalize: bank check: %w", err)
+	}
+	if bankCount == 0 {
+		return FinalizeResult{}, ErrNoBankAccount
+	}
+
+	// Pre-read cost items + participants for the split math.
+	items, err := q.ListSessionCostItems(ctx, sessionID)
+	if err != nil {
+		return FinalizeResult{}, fmt.Errorf("sessions.Finalize: list items: %w", err)
+	}
+	if len(items) == 0 {
+		return FinalizeResult{}, ErrNoCostItems
+	}
+	participants, err := q.ListSessionParticipants(ctx, sessionID)
+	if err != nil {
+		return FinalizeResult{}, fmt.Errorf("sessions.Finalize: list participants: %w", err)
+	}
+	if len(participants) == 0 {
+		return FinalizeResult{}, ErrParticipantsEmpty
+	}
+
+	totalCost, splittable := sumCostItems(items)
+	playerIDs := make([]uint64, 0, len(participants))
+	for _, p := range participants {
+		playerIDs = append(playerIDs, p.PlayerID)
+	}
+	amounts := distributeSplit(splittable, len(playerIDs))
+
+	// Mint share code BEFORE the tx (so collision retries don't hold a lock).
+	shareCode, err := shortcode.GenerateUnique(ctx, shareCodeLength, shortcode.GroupShare, func(ctx context.Context, candidate string) (bool, error) {
+		return q.SessionShareCodeExists(ctx, sql.NullString{String: candidate, Valid: true})
+	})
+	if err != nil {
+		return FinalizeResult{}, fmt.Errorf("sessions.Finalize: mint share code: %w", err)
+	}
+
+	hostIDInt := int64(hostID)
+	finalizedAt := time.Now().UTC()
+	var charges []PublicCharge
+
+	err = dbpkg.WithTx(ctx, s.db, func(tx *sql.Tx) error {
+		txq := dbgen.New(tx)
+
+		// Update session row.
+		if err := txq.UpdateSessionFinalize(ctx, dbgen.UpdateSessionFinalizeParams{
+			ShareCode:   sql.NullString{String: shareCode, Valid: true},
+			TotalCost:   totalCost,
+			FinalizedAt: sql.NullTime{Time: finalizedAt, Valid: true},
+			ID:          sessionID,
+		}); err != nil {
+			return fmt.Errorf("update session: %w", err)
+		}
+
+		// Audit: session_finalized (host actor).
+		if err := audit.Record(ctx, tx, audit.Event{
+			Type: audit.EventSessionFinalized, ActorType: audit.ActorHost,
+			HostUserID: &hostIDInt, EntityType: "session", EntityID: int64(sessionID),
+		}); err != nil {
+			return fmt.Errorf("audit session_finalized: %w", err)
+		}
+
+		// Insert charges + per-charge audit.
+		for i, pid := range playerIDs {
+			res, err := txq.InsertSessionCharge(ctx, dbgen.InsertSessionChargeParams{
+				SessionID: sessionID, PlayerID: pid, Amount: amounts[i],
+			})
+			if err != nil {
+				return fmt.Errorf("insert charge for player %d: %w", pid, err)
+			}
+			chargeID, err := res.LastInsertId()
+			if err != nil {
+				return fmt.Errorf("lastInsertId charge: %w", err)
+			}
+			if err := audit.Record(ctx, tx, audit.Event{
+				Type: audit.EventChargeCreated, ActorType: audit.ActorSystem,
+				HostUserID: &hostIDInt, EntityType: "charge", EntityID: chargeID,
+			}); err != nil {
+				return fmt.Errorf("audit charge_created: %w", err)
+			}
+			charges = append(charges, PublicCharge{
+				ID: uint64(chargeID), SessionID: sessionID, PlayerID: pid,
+				Amount: amounts[i], Status: "unpaid",
+			})
+		}
+		return nil
+	})
+	if err != nil {
+		return FinalizeResult{}, err
+	}
+
+	// Re-read for accurate FinalizedAt/Status fields.
+	updated, err := q.GetSessionByIDForHost(ctx, dbgen.GetSessionByIDForHostParams{
+		ID: sessionID, HostUserID: hostID,
+	})
+	if err != nil {
+		return FinalizeResult{}, fmt.Errorf("sessions.Finalize: re-read: %w", err)
+	}
+	return FinalizeResult{
+		Session: toPublicSession(updated), Charges: charges, ShareCode: shareCode,
+	}, nil
+}
+
+// sumCostItems returns (total, splittable). Splittable excludes items with
+// is_included_in_split=false.
+func sumCostItems(items []dbgen.ListSessionCostItemsRow) (int64, int64) {
+	var total, splittable int64
+	for _, it := range items {
+		total += it.Amount
+		if it.IsIncludedInSplit {
+			splittable += it.Amount
+		}
+	}
+	return total, splittable
+}
+
+// distributeSplit returns `count` amounts summing exactly to `splittable`.
+// Residual VND from integer division goes to the FIRST `residual` participants.
+// Example: 600000 / 7 = 85714 base + residual 2 → [85715, 85715, 85714, 85714, 85714, 85714, 85714].
+func distributeSplit(splittable int64, count int) []int64 {
+	if count <= 0 {
+		return nil
+	}
+	base := splittable / int64(count)
+	residual := splittable - base*int64(count)
+	out := make([]int64, count)
+	for i := 0; i < count; i++ {
+		amt := base
+		if int64(i) < residual {
+			amt++
+		}
+		out[i] = amt
+	}
+	return out
+}
+
+func toPublicCharge(r dbgen.SessionCharge) PublicCharge {
+	out := PublicCharge{
+		ID:        r.ID,
+		SessionID: r.SessionID,
+		PlayerID:  r.PlayerID,
+		Amount:    r.Amount,
+		Status:    r.Status,
+	}
+	if r.PaidVia.Valid {
+		v := r.PaidVia.String
+		out.PaidVia = &v
+	}
+	return out
 }
 
 // --- helpers ---

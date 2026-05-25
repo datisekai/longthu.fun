@@ -33,3 +33,4 @@ frontend/src/routeTree.gen.ts
 _bmad/
 design-artifacts/
 _bmad-output/
+.agents/

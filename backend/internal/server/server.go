@@ -72,7 +72,7 @@ func New(cfg *config.Config, db *sql.DB, gitSHA string) *Server {
 	playersHandler.RegisterRoutes(v1Auth)
 
 	sessionsSvc := sessions.NewService(db)
-	sessionsHandler := sessions.NewHandler(sessionsSvc)
+	sessionsHandler := sessions.NewHandler(sessionsSvc, cfg.AppBaseURL)
 	sessionsHandler.RegisterRoutes(v1Auth)
 
 	return &Server{cfg: cfg, db: db, router: r}

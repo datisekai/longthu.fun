@@ -51,6 +51,22 @@ export interface Session {
   finalizedAt?: string;
 }
 
+export interface Charge {
+  id: number;
+  sessionId: number;
+  playerId: number;
+  amount: number;
+  status: 'unpaid' | 'paid' | 'pending_confirmation' | 'suspected' | 'waived';
+  paidVia?: string;
+}
+
+export interface FinalizeResponse {
+  session: Session;
+  charges: Charge[];
+  shareCode: string;
+  shareUrl: string;
+}
+
 export interface CostItem {
   id: number;
   sessionId: number;
