@@ -8,7 +8,7 @@
 - US 1.8 — Founder creates first Group — completed in commit `4c34151`.
 - US 1.9 — Founder adds Players to the Group — completed in commit `34b3e1e`.
 - US 1.10 — Founder creates Session draft with cost items + participants — completed in commit `a8a1c0a`.
-- US 1.11 — Founder finalizes Session (mint share code, generate Charges) — completed in commit `TBD`.
+- US 1.11 — Founder finalizes Session (mint share code, generate Charges) — completed in commit `e4432f8`.
 
 ## Current Position
 

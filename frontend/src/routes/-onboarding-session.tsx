@@ -59,6 +59,7 @@ export function SessionDraftStep({ groupId, onSaved, onComplete }: SessionDraftS
   const [participantIDs, setParticipantIDs] = useState<number[]>([]);
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [finalizeResult, setFinalizeResult] = useState<FinalizeResponse | null>(null);
+  const [copiedType, setCopiedType] = useState<'link' | 'message' | null>(null);
   const [pendingItem, setPendingItem] = useState<{ type: CostItemType; label: string; amount: string }>({
     type: 'court',
     label: '',
@@ -190,6 +191,8 @@ export function SessionDraftStep({ groupId, onSaved, onComplete }: SessionDraftS
   async function handleCopyLink() {
     if (!finalizeResult) return;
     await navigator.clipboard.writeText(finalizeResult.shareUrl);
+    setCopiedType('link');
+    setTimeout(() => setCopiedType(null), 2000);
   }
 
   function getShareMessage(): string {
@@ -208,6 +211,8 @@ ${finalizeResult.shareUrl}`;
 
   async function handleCopyMessage() {
     await navigator.clipboard.writeText(getShareMessage());
+    setCopiedType('message');
+    setTimeout(() => setCopiedType(null), 2000);
   }
 
   const mutationError = (() => {
@@ -385,7 +390,7 @@ ${finalizeResult.shareUrl}`;
         ) : null}
 
         {finalizeResult ? (
-          // Story 1.11 confirmation panel
+          // Story 1.11/1.12 confirmation panel with toast feedback
           <section className="space-y-4 rounded-md border border-primary/40 bg-primary/10 p-4">
             <div className="space-y-1 text-center">
               <h2 className="text-xl font-bold text-primary">{vi.onboarding.session.confirmationTitle}</h2>
@@ -398,12 +403,26 @@ ${finalizeResult.shareUrl}`;
             </div>
             <div className="flex gap-2">
               <Button variant="secondary" size="lg" className="flex-1" onClick={handleCopyLink}>
-                {vi.onboarding.session.copyLink}
+                {copiedType === 'link' ? vi.onboarding.session.copied : vi.onboarding.session.copyLink}
               </Button>
               <Button variant="primary" size="lg" className="flex-1" onClick={handleCopyMessage}>
-                {vi.onboarding.session.copyMessage}
+                {copiedType === 'message' ? vi.onboarding.session.copied : vi.onboarding.session.copyMessage}
               </Button>
             </div>
+            {copiedType ? (
+              <p className="text-center text-xs text-primary">
+                {copiedType === 'link' ? vi.onboarding.session.copiedLink : vi.onboarding.session.copiedMessage}
+              </p>
+            ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              className="w-full"
+              onClick={() => window.location.href = '/'}
+            >
+              {vi.onboarding.session.complete}
+            </Button>
           </section>
         ) : (
           <>
