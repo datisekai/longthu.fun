@@ -97,3 +97,45 @@ func bankNameForCode(code string) string {
 		return ""
 	}
 }
+
+func (s *Service) List(ctx context.Context, hostID uint64) ([]PublicBankAccount, error) {
+	rows, err := s.db.QueryContext(ctx, listBankAccountsQuery, hostID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var accounts []PublicBankAccount
+	for rows.Next() {
+		var a struct {
+			ID, UserID            uint64
+			BankName, BankCode     string
+			AccountNumber          string
+			AccountHolderName     string
+			IsDefault             bool
+		}
+		if err := rows.Scan(&a.ID, &a.UserID, &a.BankName, &a.BankCode, &a.AccountNumber, &a.AccountHolderName, &a.IsDefault); err != nil {
+			return nil, err
+		}
+		accounts = append(accounts, PublicBankAccount{
+			ID:                a.ID,
+			BankName:          a.BankName,
+			BankCode:          a.BankCode,
+			AccountNumber:     a.AccountNumber,
+			AccountHolderName: a.AccountHolderName,
+			IsDefault:         a.IsDefault,
+		})
+	}
+	return accounts, rows.Err()
+}
+
+const listBankAccountsQuery = `SELECT id, user_id, bank_name, bank_code, account_number, account_holder_name, is_default FROM bank_accounts WHERE user_id = ? ORDER BY is_default DESC, id ASC`
+
+func (s *Service) SetDefault(ctx context.Context, hostID uint64, bankID uint64) error {
+	_, err := s.db.ExecContext(ctx, "UPDATE bank_accounts SET is_default = 0 WHERE user_id = ?", hostID)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, "UPDATE bank_accounts SET is_default = 1 WHERE id = ?", bankID)
+	return err
+}

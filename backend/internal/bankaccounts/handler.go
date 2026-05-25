@@ -1,6 +1,7 @@
 package bankaccounts
 
 import (
+	"fmt"
 	"net/http"
 	"regexp"
 	"strings"
@@ -28,7 +29,9 @@ func NewHandler(svc *Service) *Handler {
 }
 
 func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
+	r.GET("/bank-accounts", h.handleList)
 	r.POST("/bank-accounts", h.handleCreate)
+	r.PATCH("/bank-accounts/:bankId/default", h.handleSetDefault)
 }
 
 func (h *Handler) handleCreate(c *gin.Context) {
@@ -70,4 +73,43 @@ func (h *Handler) handleCreate(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, account)
+}
+
+func (h *Handler) handleList(c *gin.Context) {
+	hostID, ok := tenant.HostID(c)
+	if !ok {
+		httpx.Reply(c, http.StatusUnauthorized, "Chưa đăng nhập", "")
+		return
+	}
+
+	accounts, err := h.svc.List(c.Request.Context(), hostID)
+	if err != nil {
+		httpx.Reply(c, http.StatusInternalServerError, "Không lấy được danh sách", "")
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"bankAccounts": accounts})
+}
+
+func (h *Handler) handleSetDefault(c *gin.Context) {
+	hostID, ok := tenant.HostID(c)
+	if !ok {
+		httpx.Reply(c, http.StatusUnauthorized, "Chưa đăng nhập", "")
+		return
+	}
+
+	bankIDStr := c.Param("bankId")
+	var bankID uint64
+	if _, err := fmt.Sscanf(bankIDStr, "%d", &bankID); err != nil || bankID == 0 {
+		httpx.Reply(c, http.StatusNotFound, "Not found", "")
+		return
+	}
+
+	err := h.svc.SetDefault(c.Request.Context(), hostID, bankID)
+	if err != nil {
+		httpx.Reply(c, http.StatusInternalServerError, "Không cập nhật được", "")
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
