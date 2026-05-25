@@ -49,6 +49,8 @@ type Group struct {
 	ArchivedAt              sql.NullTime
 	CreatedAt               time.Time
 	UpdatedAt               time.Time
+	// Encrypted payOS credentials: {clientId, apiKey, checksumKey}
+	AutoDetectCredentialsJson sql.NullString
 }
 
 type Payment struct {
@@ -64,6 +66,8 @@ type Payment struct {
 	RawPayloadJson        json.RawMessage
 	CreatedAt             time.Time
 	UpdatedAt             time.Time
+	// Denormalized for dashboard queries
+	HostUserID sql.NullInt64
 }
 
 type PaymentIntent struct {

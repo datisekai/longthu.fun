@@ -156,6 +156,43 @@ func (q *Queries) GetPaymentIntentByCode(ctx context.Context, code string) (GetP
 	return i, err
 }
 
+const getPaymentIntentByID = `-- name: GetPaymentIntentByID :one
+SELECT id, player_id, group_id, session_id, amount, code, status, provider, covers_charge_ids_json, expires_at
+FROM payment_intents
+WHERE id = ?
+`
+
+type GetPaymentIntentByIDRow struct {
+	ID                  uint64
+	PlayerID            uint64
+	GroupID             uint64
+	SessionID           sql.NullInt64
+	Amount              int64
+	Code                string
+	Status              string
+	Provider            string
+	CoversChargeIdsJson json.RawMessage
+	ExpiresAt           sql.NullTime
+}
+
+func (q *Queries) GetPaymentIntentByID(ctx context.Context, id uint64) (GetPaymentIntentByIDRow, error) {
+	row := q.db.QueryRowContext(ctx, getPaymentIntentByID, id)
+	var i GetPaymentIntentByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.PlayerID,
+		&i.GroupID,
+		&i.SessionID,
+		&i.Amount,
+		&i.Code,
+		&i.Status,
+		&i.Provider,
+		&i.CoversChargeIdsJson,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
 const listAllUnpaidChargesForPlayer = `-- name: ListAllUnpaidChargesForPlayer :many
 SELECT sc.id, sc.session_id, sc.player_id, sc.amount, sc.status
 FROM session_charges sc

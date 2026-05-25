@@ -36,6 +36,11 @@ SELECT id, player_id, group_id, session_id, amount, code, status, provider, cove
 FROM payment_intents
 WHERE code = ?;
 
+-- name: GetPaymentIntentByID :one
+SELECT id, player_id, group_id, session_id, amount, code, status, provider, covers_charge_ids_json, expires_at
+FROM payment_intents
+WHERE id = ?;
+
 -- name: CancelPaymentIntent :exec
 UPDATE payment_intents SET status = ? WHERE id = ?;
 

@@ -11,6 +11,7 @@ import (
 
 type Querier interface {
 	CancelPaymentIntent(ctx context.Context, arg CancelPaymentIntentParams) error
+	ConfirmSuspectedPayment(ctx context.Context, arg ConfirmSuspectedPaymentParams) error
 	// Used to enforce tier caps in Service.BulkCreate.
 	CountActivePlayersInGroup(ctx context.Context, groupID uint64) (int64, error)
 	CountBankAccountsForHost(ctx context.Context, userID uint64) (int64, error)
@@ -19,11 +20,18 @@ type Querier interface {
 	// Used to validate that all submitted playerIds belong to the session's Group.
 	// Returns the count of matching active players; caller compares to len(submitted).
 	CountPlayersInGroupByIDs(ctx context.Context, arg CountPlayersInGroupByIDsParams) (int64, error)
+	// Story 6.5: Dashboard counters
+	CountSuspectedPaymentsForHost(ctx context.Context, hostUserID sql.NullInt64) (int64, error)
+	CountUnmatchedPaymentsForHost(ctx context.Context, hostUserID sql.NullInt64) (int64, error)
 	CreatePaymentIntent(ctx context.Context, arg CreatePaymentIntentParams) (sql.Result, error)
 	// First half of the participant-replace tx (PUT semantics for the participant set).
 	DeleteAllSessionParticipants(ctx context.Context, sessionID uint64) error
 	// Removes a single cost item by its ID. Caller already verified session ownership.
 	DeleteSessionCostItem(ctx context.Context, arg DeleteSessionCostItemParams) error
+	// Disable auto-detect for a group
+	DisableAutoDetect(ctx context.Context, arg DisableAutoDetectParams) error
+	// Enable auto-detect for a group: update bank account + encrypted credentials
+	EnableAutoDetect(ctx context.Context, arg EnableAutoDetectParams) error
 	// Tenant-isolated charge read via session → group → host.
 	GetChargeByIDForHost(ctx context.Context, arg GetChargeByIDForHostParams) (GetChargeByIDForHostRow, error)
 	// Story 3.2: Host Dashboard queries
@@ -33,12 +41,27 @@ type Querier interface {
 	// bank as `default_bank_account_id`. Returns sql.ErrNoRows if the host has
 	// no bank account yet; callers should treat that as "default_bank_account_id = NULL".
 	GetDefaultBankAccountForHost(ctx context.Context, userID uint64) (BankAccount, error)
+	// Get all bank accounts for a group (for Auto-Detect wizard)
+	GetGroupBankAccounts(ctx context.Context, userID uint64) ([]GetGroupBankAccountsRow, error)
 	// Host-scoped lookup. Returning sql.ErrNoRows for both "missing" and
 	// "belongs to another host" preserves tenant isolation.
-	GetGroupByIDForHost(ctx context.Context, arg GetGroupByIDForHostParams) (Group, error)
+	GetGroupByIDForHost(ctx context.Context, arg GetGroupByIDForHostParams) (GetGroupByIDForHostRow, error)
+	// Get the host_user_id for a group (for payment matching)
+	GetGroupHostUserID(ctx context.Context, id uint64) (uint64, error)
+	// Story 6.2: Auto-Detect setup queries
+	// Get a group with auto-detect settings for the host
+	GetGroupWithAutoDetect(ctx context.Context, arg GetGroupWithAutoDetectParams) (GetGroupWithAutoDetectRow, error)
 	// Story 2.4: Payment Intent queries
 	GetLatestFinalizedSessionForGroup(ctx context.Context, groupID uint64) (GetLatestFinalizedSessionForGroupRow, error)
+	// Check for duplicate webhook (idempotency)
+	GetPaymentByProviderTx(ctx context.Context, arg GetPaymentByProviderTxParams) (uint64, error)
 	GetPaymentIntentByCode(ctx context.Context, code string) (GetPaymentIntentByCodeRow, error)
+	// Exact match: code + amount + pending status
+	GetPaymentIntentByCodeAndAmount(ctx context.Context, arg GetPaymentIntentByCodeAndAmountParams) (GetPaymentIntentByCodeAndAmountRow, error)
+	GetPaymentIntentByID(ctx context.Context, id uint64) (GetPaymentIntentByIDRow, error)
+	// Get bank accounts that support payOS auto-detect
+	// Supported: MBBank, OCB, KienlongBank, ACB, BIDV
+	GetPayosSupportedBankAccounts(ctx context.Context, userID uint64) ([]GetPayosSupportedBankAccountsRow, error)
 	GetPlayerByID(ctx context.Context, id uint64) (GetPlayerByIDRow, error)
 	GetPlayerByPublicCode(ctx context.Context, publicCode string) (GetPlayerByPublicCodeRow, error)
 	// Sum of unpaid charges across ALL sessions for a player (for privacy_mode=public rows).
@@ -59,6 +82,8 @@ type Querier interface {
 	// auto_detect_enabled defaults to 0 per the schema; slug stays NULL
 	// (vestigial per Story 1.2 §Completion Notes #2).
 	InsertGroup(ctx context.Context, arg InsertGroupParams) (sql.Result, error)
+	// Story 6.3 & 6.4: Payment matching queries
+	InsertPayment(ctx context.Context, arg InsertPaymentParams) (sql.Result, error)
 	// Single Player insert. Caller mints public_code via shortcode.GenerateUnique
 	// (uniqueness checked against PlayerExistsByPublicCode below).
 	InsertPlayer(ctx context.Context, arg InsertPlayerParams) (sql.Result, error)
@@ -73,6 +98,7 @@ type Querier interface {
 	InsertSessionParticipant(ctx context.Context, arg InsertSessionParticipantParams) error
 	// Insert a new host user. Returns the result (use LastInsertId() for the new id).
 	InsertUser(ctx context.Context, arg InsertUserParams) (sql.Result, error)
+	LinkPaymentToPlayer(ctx context.Context, arg LinkPaymentToPlayerParams) error
 	// Returns the active roster for the participant picker (Story 1.10).
 	// Ordered by display_name for stable UX.
 	ListActivePlayersInGroup(ctx context.Context, groupID uint64) ([]ListActivePlayersInGroupRow, error)
@@ -97,10 +123,15 @@ type Querier interface {
 	ListSessionCostItems(ctx context.Context, sessionID uint64) ([]ListSessionCostItemsRow, error)
 	// Returns the player IDs participating in a session.
 	ListSessionParticipants(ctx context.Context, sessionID uint64) ([]ListSessionParticipantsRow, error)
+	// List suspected payments for dashboard resolution
+	ListSuspectedPaymentsForHost(ctx context.Context, hostUserID sql.NullInt64) ([]ListSuspectedPaymentsForHostRow, error)
+	// List unmatched payments for dashboard resolution
+	ListUnmatchedPaymentsForHost(ctx context.Context, hostUserID sql.NullInt64) ([]ListUnmatchedPaymentsForHostRow, error)
 	ListUnpaidChargesForPlayerSession(ctx context.Context, arg ListUnpaidChargesForPlayerSessionParams) ([]ListUnpaidChargesForPlayerSessionRow, error)
 	PaymentIntentCodeExists(ctx context.Context, code string) (bool, error)
 	// Used by shortcode.GenerateUnique's `exists` callback.
 	PlayerExistsByPublicCode(ctx context.Context, publicCode string) (bool, error)
+	RejectSuspectedPayment(ctx context.Context, arg RejectSuspectedPaymentParams) error
 	// shortcode.GenerateUnique callback against sessions.share_code.
 	SessionShareCodeExists(ctx context.Context, shareCode sql.NullString) (bool, error)
 	UpdateChargeStatus(ctx context.Context, arg UpdateChargeStatusParams) error
@@ -108,9 +139,15 @@ type Querier interface {
 	UpdateChargeStatusManual(ctx context.Context, arg UpdateChargeStatusManualParams) error
 	// Story 4.4: Waive charge
 	UpdateChargeWaived(ctx context.Context, id uint64) error
+	UpdateChargesToPaidAuto(ctx context.Context, id uint64) error
 	// Story 5.2: Set Telegram chat ID
 	UpdateGroupTelegramChatID(ctx context.Context, arg UpdateGroupTelegramChatIDParams) error
 	UpdatePaymentIntentStatus(ctx context.Context, arg UpdatePaymentIntentStatusParams) error
+	UpdatePaymentIntentToMatched(ctx context.Context, arg UpdatePaymentIntentToMatchedParams) error
+	UpdatePaymentIntentToSuspected(ctx context.Context, id uint64) error
+	UpdatePaymentStatus(ctx context.Context, arg UpdatePaymentStatusParams) error
+	// Update host_user_id denormalized column for payments
+	UpdatePaymentsHostUserID(ctx context.Context) error
 	// Updates date/title/location on a draft session (host edits before finalize).
 	UpdateSessionDraftMeta(ctx context.Context, arg UpdateSessionDraftMetaParams) error
 	// Sets the session to finalized + records share_code + total_cost + finalized_at.

@@ -11,15 +11,18 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/datisekai/longthu.fun/backend/internal/auth"
+	"github.com/datisekai/longthu.fun/backend/internal/autodetect"
 	"github.com/datisekai/longthu.fun/backend/internal/bankaccounts"
 	"github.com/datisekai/longthu.fun/backend/internal/config"
 	"github.com/datisekai/longthu.fun/backend/internal/dashboard"
 	"github.com/datisekai/longthu.fun/backend/internal/groups"
 	"github.com/datisekai/longthu.fun/backend/internal/players"
 	"github.com/datisekai/longthu.fun/backend/internal/paymentintents"
+	"github.com/datisekai/longthu.fun/backend/internal/payments"
 	"github.com/datisekai/longthu.fun/backend/internal/public"
 	"github.com/datisekai/longthu.fun/backend/internal/ratelimit"
 	"github.com/datisekai/longthu.fun/backend/internal/sessions"
+	"github.com/datisekai/longthu.fun/backend/internal/webhooks"
 )
 
 // Server bundles the wired-up router + its dependencies.
@@ -84,12 +87,25 @@ func New(cfg *config.Config, db *sql.DB, gitSHA string) *Server {
 	sessionsHandler := sessions.NewHandler(sessionsSvc, cfg.AppBaseURL)
 	sessionsHandler.RegisterRoutes(v1Auth)
 
+	// Auto-Detect routes (Story 6.2).
+	autoDetectSvc := autodetect.NewService(db)
+	autoDetectHandler := autodetect.NewHandler(autoDetectSvc)
+	autoDetectHandler.RegisterRoutes(v1Auth)
+
 	publicHandler := public.NewHandler(db)
 	publicHandler.RegisterRoutes(v1Public)
 
 	paymentIntentsSvc := paymentintents.NewService(db)
 	paymentIntentsHandler := paymentintents.NewHandler(paymentIntentsSvc)
 	paymentIntentsHandler.RegisterPublicRoutes(v1Public)
+
+	// Payment dashboard routes (Story 6.5-6.7)
+	paymentsHandler := payments.NewHandler(db)
+	paymentsHandler.RegisterDashboardRoutes(v1Auth)
+
+	// Webhook routes (Story 6.3) - public endpoint, no auth.
+	webhookHandler := webhooks.NewHandler(db, "webhook.longthu.fun")
+	webhookHandler.RegisterRoutes(r)
 
 	return &Server{cfg: cfg, db: db, router: r}
 }
