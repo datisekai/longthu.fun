@@ -80,3 +80,17 @@ WHERE id = ?;
 -- name: SessionShareCodeExists :one
 -- shortcode.GenerateUnique callback against sessions.share_code.
 SELECT EXISTS(SELECT 1 FROM sessions WHERE share_code = ?) AS found;
+
+-- name: GetChargeByIDForHost :one
+-- Tenant-isolated charge read via session → group → host.
+SELECT sc.id, sc.session_id, sc.player_id, sc.amount, sc.status, sc.paid_at, sc.paid_via, sc.description
+FROM session_charges sc
+JOIN sessions s ON s.id = sc.session_id
+JOIN `groups` g ON g.id = s.group_id
+WHERE sc.id = ? AND g.host_user_id = ?;
+
+-- name: UpdateChargeStatusManual :exec
+-- Mark charge as paid (manual confirm) or revert to unpaid (undo).
+UPDATE session_charges
+SET status = ?, paid_at = ?, paid_via = ?
+WHERE id = ?;

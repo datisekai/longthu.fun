@@ -22,6 +22,8 @@ type Querier interface {
 	DeleteAllSessionParticipants(ctx context.Context, sessionID uint64) error
 	// Removes a single cost item by its ID. Caller already verified session ownership.
 	DeleteSessionCostItem(ctx context.Context, arg DeleteSessionCostItemParams) error
+	// Tenant-isolated charge read via session → group → host.
+	GetChargeByIDForHost(ctx context.Context, arg GetChargeByIDForHostParams) (GetChargeByIDForHostRow, error)
 	GetDefaultBankAccountByGroup(ctx context.Context, id uint64) (GetDefaultBankAccountByGroupRow, error)
 	// Added in Story 1.8 — used by Group create to auto-pick the host's default
 	// bank as `default_bank_account_id`. Returns sql.ErrNoRows if the host has
@@ -94,6 +96,8 @@ type Querier interface {
 	// shortcode.GenerateUnique callback against sessions.share_code.
 	SessionShareCodeExists(ctx context.Context, shareCode sql.NullString) (bool, error)
 	UpdateChargeStatus(ctx context.Context, arg UpdateChargeStatusParams) error
+	// Mark charge as paid (manual confirm) or revert to unpaid (undo).
+	UpdateChargeStatusManual(ctx context.Context, arg UpdateChargeStatusManualParams) error
 	UpdatePaymentIntentStatus(ctx context.Context, arg UpdatePaymentIntentStatusParams) error
 	// Updates date/title/location on a draft session (host edits before finalize).
 	UpdateSessionDraftMeta(ctx context.Context, arg UpdateSessionDraftMetaParams) error

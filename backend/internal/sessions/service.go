@@ -6,6 +6,7 @@ package sessions
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -69,16 +70,18 @@ type PublicParticipant struct {
 
 // Typed errors mapped to HTTP statuses by the handler.
 var (
-	ErrSessionNotFound          = errors.New("sessions: not found")
-	ErrGroupNotFound            = errors.New("sessions: group not found for this host")
-	ErrInvalidDate              = errors.New("sessions: invalid date")
-	ErrInvalidCostItemType      = errors.New("sessions: invalid cost item type")
-	ErrInvalidCostItemAmount    = errors.New("sessions: invalid cost item amount")
-	ErrInvalidCostItemLabel     = errors.New("sessions: invalid cost item label")
-	ErrParticipantsEmpty        = errors.New("sessions: at least one participant required")
-	ErrParticipantOutsideRoster = errors.New("sessions: participant not in group roster")
+	ErrSessionNotFound           = errors.New("sessions: not found")
+	ErrGroupNotFound             = errors.New("sessions: group not found for this host")
+	ErrInvalidDate               = errors.New("sessions: invalid date")
+	ErrInvalidCostItemType       = errors.New("sessions: invalid cost item type")
+	ErrInvalidCostItemAmount     = errors.New("sessions: invalid cost item amount")
+	ErrInvalidCostItemLabel      = errors.New("sessions: invalid cost item label")
+	ErrParticipantsEmpty         = errors.New("sessions: at least one participant required")
+	ErrParticipantOutsideRoster  = errors.New("sessions: participant not in group roster")
 	ErrNoBankAccount            = errors.New("sessions: host has no bank account; cannot finalize")
 	ErrNoCostItems              = errors.New("sessions: cannot finalize without at least 1 cost item")
+	ErrCostItemNotFound         = errors.New("sessions: cost item not found")
+	ErrChargeNotFound           = errors.New("sessions: charge not found")
 )
 
 type Service struct {
@@ -580,4 +583,64 @@ func dedupUint64(in []uint64) []uint64 {
 		out = append(out, v)
 	}
 	return out
+}
+
+func (s *Service) PatchCharge(ctx context.Context, hostID uint64, chargeID uint64, action string) (dbgen.GetChargeByIDForHostRow, error) {
+	q := dbgen.New(s.db)
+
+	// Tenant-isolated read
+	charge, err := q.GetChargeByIDForHost(ctx, dbgen.GetChargeByIDForHostParams{
+		ID:        chargeID,
+		HostUserID: hostID,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return dbgen.GetChargeByIDForHostRow{}, ErrChargeNotFound
+		}
+		return dbgen.GetChargeByIDForHostRow{}, fmt.Errorf("get charge: %w", err)
+	}
+
+	switch action {
+	case "confirm_paid":
+		// Idempotent — if already paid, return as-is
+		if charge.Status == "paid" {
+			return charge, nil
+		}
+		err = q.UpdateChargeStatusManual(ctx, dbgen.UpdateChargeStatusManualParams{
+			Status: "paid",
+			PaidAt: sql.NullTime{Time: time.Now().UTC(), Valid: true},
+			PaidVia: sql.NullString{String: "manual", Valid: true},
+			ID:     chargeID,
+		})
+		if err != nil {
+			return dbgen.GetChargeByIDForHostRow{}, fmt.Errorf("confirm paid: %w", err)
+		}
+		return q.GetChargeByIDForHost(ctx, dbgen.GetChargeByIDForHostParams{
+			ID:        chargeID,
+			HostUserID: hostID,
+		})
+
+	case "undo_paid":
+		err = q.UpdateChargeStatusManual(ctx, dbgen.UpdateChargeStatusManualParams{
+			Status: "unpaid",
+			PaidAt: sql.NullTime{Valid: false},
+			PaidVia: sql.NullString{Valid: false},
+			ID:     chargeID,
+		})
+		if err != nil {
+			return dbgen.GetChargeByIDForHostRow{}, fmt.Errorf("undo paid: %w", err)
+		}
+		return q.GetChargeByIDForHost(ctx, dbgen.GetChargeByIDForHostParams{
+			ID:        chargeID,
+			HostUserID: hostID,
+		})
+
+	default:
+		return dbgen.GetChargeByIDForHostRow{}, fmt.Errorf("unknown action: %s", action)
+	}
+}
+
+func mustMarshal(v any) string {
+	b, _ := json.Marshal(v)
+	return string(b)
 }

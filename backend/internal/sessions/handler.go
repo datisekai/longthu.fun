@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -13,7 +14,7 @@ import (
 )
 
 type Handler struct {
-	svc        *Service
+	svc         *Service
 	appBaseURL string
 }
 
@@ -28,12 +29,7 @@ func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
 	r.DELETE("/sessions/:sessionId/cost-items/:itemId", h.handleRemoveCostItem)
 	r.PUT("/sessions/:sessionId/participants", h.handleSetParticipants)
 	r.POST("/sessions/:sessionId/finalize", h.handleFinalize)
-}
-
-type createDraftReq struct {
-	Date     string `json:"date"`
-	Title    string `json:"title"`
-	Location string `json:"location"`
+	r.PATCH("/session-charges/:chargeId", h.handlePatchCharge)
 }
 
 func (h *Handler) handleCreateDraft(c *gin.Context) {
@@ -47,14 +43,21 @@ func (h *Handler) handleCreateDraft(c *gin.Context) {
 		httpx.Reply(c, http.StatusNotFound, "Not found", "")
 		return
 	}
-	var req createDraftReq
+	var req struct {
+		Date     string  `json:"date"`
+		Title   *string `json:"title,omitempty"`
+		Location *string `json:"location,omitempty"`
+	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		httpx.Reply(c, http.StatusBadRequest, "Yêu cầu sai định dạng", err.Error())
 		return
 	}
 
+	var titleVal, locationVal string
+	if req.Title != nil { titleVal = *req.Title }
+	if req.Location != nil { locationVal = *req.Location }
 	session, err := h.svc.CreateDraft(c.Request.Context(), hostID, CreateDraftParams{
-		GroupID: groupID, Date: req.Date, Title: req.Title, Location: req.Location,
+		GroupID: groupID, Date: req.Date, Title: titleVal, Location: locationVal,
 	})
 	if err == nil {
 		c.JSON(http.StatusCreated, session)
@@ -92,14 +95,7 @@ func (h *Handler) handleGetDraft(c *gin.Context) {
 		httpx.Reply(c, http.StatusNotFound, "Not found", "")
 		return
 	}
-	httpx.Reply(c, http.StatusInternalServerError, "Không đọc được buổi đánh", "")
-}
-
-type addCostItemReq struct {
-	Type              string `json:"type"`
-	Label             string `json:"label"`
-	Amount            int64  `json:"amount"`
-	IsIncludedInSplit *bool  `json:"isIncludedInSplit"`
+	httpx.Reply(c, http.StatusInternalServerError, "Lỗi server", "")
 }
 
 func (h *Handler) handleAddCostItem(c *gin.Context) {
@@ -113,22 +109,26 @@ func (h *Handler) handleAddCostItem(c *gin.Context) {
 		httpx.Reply(c, http.StatusNotFound, "Not found", "")
 		return
 	}
-	var req addCostItemReq
+	var req struct {
+		Type             string  `json:"type"`
+		Label            string  `json:"label"`
+		Amount           int64   `json:"amount"`
+		IsIncludedInSplit *bool  `json:"isIncludedInSplit"`
+	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		httpx.Reply(c, http.StatusBadRequest, "Yêu cầu sai định dạng", err.Error())
 		return
 	}
-	included := true
-	if req.IsIncludedInSplit != nil {
-		included = *req.IsIncludedInSplit
+	if req.IsIncludedInSplit == nil {
+		req.IsIncludedInSplit = new(bool)
+		*req.IsIncludedInSplit = true
 	}
-
 	item, err := h.svc.AddCostItem(c.Request.Context(), hostID, AddCostItemParams{
-		SessionID:         sessionID,
-		Type:              req.Type,
-		Label:             req.Label,
-		Amount:            req.Amount,
-		IsIncludedInSplit: included,
+		SessionID: sessionID,
+		Type: req.Type,
+		Label: req.Label,
+		Amount: req.Amount,
+		IsIncludedInSplit: *req.IsIncludedInSplit,
 	})
 	if err == nil {
 		c.JSON(http.StatusCreated, item)
@@ -138,19 +138,11 @@ func (h *Handler) handleAddCostItem(c *gin.Context) {
 	case errors.Is(err, ErrSessionNotFound):
 		httpx.Reply(c, http.StatusNotFound, "Not found", "")
 	case errors.Is(err, ErrInvalidCostItemType):
-		httpx.ReplyValidation(c, "Loại không hợp lệ", []httpx.FieldError{
-			{Field: "type", Message: "Loại phải là court / shuttle / water / other / discount"},
-		})
-	case errors.Is(err, ErrInvalidCostItemAmount):
-		httpx.ReplyValidation(c, "Số tiền không hợp lệ", []httpx.FieldError{
-			{Field: "amount", Message: "Số tiền không hợp lệ"},
-		})
-	case errors.Is(err, ErrInvalidCostItemLabel):
-		httpx.ReplyValidation(c, "Mô tả không hợp lệ", []httpx.FieldError{
-			{Field: "label", Message: "Mô tả cần 1-80 ký tự"},
+		httpx.ReplyValidation(c, "Loại chi phí không hợp lệ", []httpx.FieldError{
+			{Field: "type", Message: "Loại không hợp lệ"},
 		})
 	default:
-		httpx.Reply(c, http.StatusInternalServerError, "Không thêm được khoản chi", "")
+		httpx.Reply(c, http.StatusInternalServerError, "Lỗi server", "")
 	}
 }
 
@@ -170,15 +162,57 @@ func (h *Handler) handleRemoveCostItem(c *gin.Context) {
 		httpx.Reply(c, http.StatusNotFound, "Not found", "")
 		return
 	}
-	if err := h.svc.RemoveCostItem(c.Request.Context(), hostID, sessionID, itemID); err != nil {
-		if errors.Is(err, ErrSessionNotFound) {
-			httpx.Reply(c, http.StatusNotFound, "Not found", "")
-			return
-		}
-		httpx.Reply(c, http.StatusInternalServerError, "Không xóa được khoản chi", "")
+	err = h.svc.RemoveCostItem(c.Request.Context(), hostID, sessionID, itemID)
+	if err == nil {
+		c.JSON(http.StatusNoContent, nil)
 		return
 	}
-	c.Status(http.StatusNoContent)
+	if errors.Is(err, ErrSessionNotFound) || errors.Is(err, ErrCostItemNotFound) {
+		httpx.Reply(c, http.StatusNotFound, "Not found", "")
+		return
+	}
+	httpx.Reply(c, http.StatusInternalServerError, "Lỗi server", "")
+}
+
+type setParticipantsReq struct {
+	PlayerIDs []uint64 `json:"playerIds"`
+}
+
+func (h *Handler) handleSetParticipants(c *gin.Context) {
+	hostID, ok := tenant.HostID(c)
+	if !ok {
+		httpx.Reply(c, http.StatusUnauthorized, "Chưa đăng nhập", "")
+		return
+	}
+	sessionID, err := strconv.ParseUint(c.Param("sessionId"), 10, 64)
+	if err != nil || sessionID == 0 {
+		httpx.Reply(c, http.StatusNotFound, "Not found", "")
+		return
+	}
+	var req setParticipantsReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.Reply(c, http.StatusBadRequest, "Yêu cầu sai định dạng", err.Error())
+		return
+	}
+	parts, err := h.svc.SetParticipants(c.Request.Context(), hostID, sessionID, req.PlayerIDs)
+	if err == nil {
+		c.JSON(http.StatusOK, gin.H{"participants": parts})
+		return
+	}
+	switch {
+	case errors.Is(err, ErrSessionNotFound):
+		httpx.Reply(c, http.StatusNotFound, "Not found", "")
+	case errors.Is(err, ErrParticipantsEmpty):
+		httpx.ReplyValidation(c, "Cần ít nhất 1 người chơi", []httpx.FieldError{
+			{Field: "playerIds", Message: "Cần ít nhất 1 người chơi"},
+		})
+	case errors.Is(err, ErrParticipantOutsideRoster):
+		httpx.ReplyValidation(c, "Có người chơi không thuộc group", []httpx.FieldError{
+			{Field: "playerIds", Message: "Có ID không thuộc group hiện tại"},
+		})
+	default:
+		httpx.Reply(c, http.StatusInternalServerError, "Không cập nhật được người chơi", "")
+	}
 }
 
 func (h *Handler) handleFinalize(c *gin.Context) {
@@ -222,43 +256,54 @@ func (h *Handler) handleFinalize(c *gin.Context) {
 	}
 }
 
-type setParticipantsReq struct {
-	PlayerIDs []uint64 `json:"playerIds"`
+type patchChargeReq struct {
+	Action string `json:"action"` // "confirm_paid" | "undo_paid"
 }
 
-func (h *Handler) handleSetParticipants(c *gin.Context) {
+// PatchChargeResult is the response for charge patch operations.
+type PatchChargeResult struct {
+	ID       uint64 `json:"id"`
+	Status   string `json:"status"`
+	PaidAt   string `json:"paidAt,omitempty"`
+	PaidVia  string `json:"paidVia,omitempty"`
+}
+
+func (h *Handler) handlePatchCharge(c *gin.Context) {
 	hostID, ok := tenant.HostID(c)
 	if !ok {
 		httpx.Reply(c, http.StatusUnauthorized, "Chưa đăng nhập", "")
 		return
 	}
-	sessionID, err := strconv.ParseUint(c.Param("sessionId"), 10, 64)
-	if err != nil || sessionID == 0 {
+	chargeID, err := strconv.ParseUint(c.Param("chargeId"), 10, 64)
+	if err != nil || chargeID == 0 {
 		httpx.Reply(c, http.StatusNotFound, "Not found", "")
 		return
 	}
-	var req setParticipantsReq
+	var req patchChargeReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.Reply(c, http.StatusBadRequest, "Yêu cầu sai định dạng", err.Error())
+		httpx.Reply(c, http.StatusBadRequest, "Yêu cầu sai định dạng", "")
 		return
 	}
-	parts, err := h.svc.SetParticipants(c.Request.Context(), hostID, sessionID, req.PlayerIDs)
+
+	charge, err := h.svc.PatchCharge(c.Request.Context(), hostID, chargeID, req.Action)
 	if err == nil {
-		c.JSON(http.StatusOK, gin.H{"participants": parts})
+		result := PatchChargeResult{
+			ID:     charge.ID,
+			Status: charge.Status,
+		}
+		if charge.PaidAt.Valid {
+			result.PaidAt = charge.PaidAt.Time.Format(time.RFC3339)
+		}
+		if charge.PaidVia.Valid {
+			result.PaidVia = charge.PaidVia.String
+		}
+		c.JSON(http.StatusOK, result)
 		return
 	}
 	switch {
-	case errors.Is(err, ErrSessionNotFound):
+	case errors.Is(err, ErrChargeNotFound):
 		httpx.Reply(c, http.StatusNotFound, "Not found", "")
-	case errors.Is(err, ErrParticipantsEmpty):
-		httpx.ReplyValidation(c, "Cần ít nhất 1 người chơi", []httpx.FieldError{
-			{Field: "playerIds", Message: "Cần ít nhất 1 người chơi"},
-		})
-	case errors.Is(err, ErrParticipantOutsideRoster):
-		httpx.ReplyValidation(c, "Có người chơi không thuộc group", []httpx.FieldError{
-			{Field: "playerIds", Message: "Có ID không thuộc group hiện tại"},
-		})
 	default:
-		httpx.Reply(c, http.StatusInternalServerError, "Không cập nhật được người chơi", "")
+		httpx.Reply(c, http.StatusInternalServerError, "Lỗi server", "")
 	}
 }

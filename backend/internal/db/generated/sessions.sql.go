@@ -68,6 +68,47 @@ func (q *Queries) DeleteSessionCostItem(ctx context.Context, arg DeleteSessionCo
 	return err
 }
 
+const getChargeByIDForHost = `-- name: GetChargeByIDForHost :one
+SELECT sc.id, sc.session_id, sc.player_id, sc.amount, sc.status, sc.paid_at, sc.paid_via, sc.description
+FROM session_charges sc
+JOIN sessions s ON s.id = sc.session_id
+JOIN ` + "`" + `groups` + "`" + ` g ON g.id = s.group_id
+WHERE sc.id = ? AND g.host_user_id = ?
+`
+
+type GetChargeByIDForHostParams struct {
+	ID         uint64
+	HostUserID uint64
+}
+
+type GetChargeByIDForHostRow struct {
+	ID          uint64
+	SessionID   uint64
+	PlayerID    uint64
+	Amount      int64
+	Status      string
+	PaidAt      sql.NullTime
+	PaidVia     sql.NullString
+	Description sql.NullString
+}
+
+// Tenant-isolated charge read via session → group → host.
+func (q *Queries) GetChargeByIDForHost(ctx context.Context, arg GetChargeByIDForHostParams) (GetChargeByIDForHostRow, error) {
+	row := q.db.QueryRowContext(ctx, getChargeByIDForHost, arg.ID, arg.HostUserID)
+	var i GetChargeByIDForHostRow
+	err := row.Scan(
+		&i.ID,
+		&i.SessionID,
+		&i.PlayerID,
+		&i.Amount,
+		&i.Status,
+		&i.PaidAt,
+		&i.PaidVia,
+		&i.Description,
+	)
+	return i, err
+}
+
 const getSessionByIDForHost = `-- name: GetSessionByIDForHost :one
 SELECT s.id, s.group_id, s.` + "`" + `date` + "`" + `, s.title, s.location,
        s.start_time, s.end_time, s.total_cost, s.share_code,
@@ -333,6 +374,30 @@ func (q *Queries) SessionShareCodeExists(ctx context.Context, shareCode sql.Null
 	var found bool
 	err := row.Scan(&found)
 	return found, err
+}
+
+const updateChargeStatusManual = `-- name: UpdateChargeStatusManual :exec
+UPDATE session_charges
+SET status = ?, paid_at = ?, paid_via = ?
+WHERE id = ?
+`
+
+type UpdateChargeStatusManualParams struct {
+	Status  string
+	PaidAt  sql.NullTime
+	PaidVia sql.NullString
+	ID      uint64
+}
+
+// Mark charge as paid (manual confirm) or revert to unpaid (undo).
+func (q *Queries) UpdateChargeStatusManual(ctx context.Context, arg UpdateChargeStatusManualParams) error {
+	_, err := q.db.ExecContext(ctx, updateChargeStatusManual,
+		arg.Status,
+		arg.PaidAt,
+		arg.PaidVia,
+		arg.ID,
+	)
+	return err
 }
 
 const updateSessionDraftMeta = `-- name: UpdateSessionDraftMeta :exec
