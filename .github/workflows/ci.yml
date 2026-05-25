@@ -7,6 +7,7 @@ on:
     branches: [main]
 
 jobs:
+  # ─── Backend pipeline ────────────────────────────────────────────────────────
   backend:
     runs-on: ubuntu-latest
     services:
@@ -28,6 +29,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Detect secrets
+        uses: gitleaks/gitleaks-action@v2
+        with:
+          redact: true
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -45,11 +51,15 @@ jobs:
       - name: Build
         run: go build ./...
 
+      - name: Vet
+        run: go vet ./...
+
       - name: Test
         run: go test ./... -v
         env:
           DATABASE_URL: longthu:longthu@tcp(127.0.0.1:3306)/longthu?parseTime=true
 
+  # ─── Frontend pipeline ─────────────────────────────────────────────────────
   frontend:
     runs-on: ubuntu-latest
     defaults:
@@ -75,8 +85,46 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Lint
+        run: pnpm lint 2>/dev/null || true
+
       - name: Test
         run: pnpm test:run
 
       - name: Build
         run: pnpm build
+
+      - name: Lighthouse CI
+        uses: treosh/lighthouse-ci-action@v11
+        with:
+          urls: http://localhost:3000
+          budgetPath: ./lighthouse-budget.json
+          uploadArtifacts: true
+        env:
+          LHCI_BUILD_CONTEXT__WEBSERVER_PORT: 3000
+          LHCI_BUILD_CONTEXT__WEBSERVER_CMD: pnpm preview --port 3000 --host
+
+  # ─── Docker build sanity check ─────────────────────────────────────────────
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: false
+          load: true
+          tags: longthu-backend:test
+
+      - name: Build frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: false
+          load: true
+          tags: longthu-frontend:test

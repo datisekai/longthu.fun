@@ -1,0 +1,24 @@
+[
+  {
+    "resourceSizes": [
+      {
+        "resourceType": "total",
+        "budget": 500
+      },
+      {
+        "resourceType": "script",
+        "budget": 200
+      },
+      {
+        "resourceType": "image",
+        "budget": 150
+      }
+    ],
+    "resourceHints": [
+      {
+        "resourceType": "preconnect",
+        "budget": 3
+      }
+    ]
+  }
+]
