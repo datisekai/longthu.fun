@@ -1,39 +1,63 @@
-# Longthu.fun - Badminton Court Bill Sharing Platform
+# Longthu.fun — Badminton Court Bill Sharing Platform
 
 Hệ thống chia bill cầu lông tự động. Host tạo buổi chơi → chia tiền → player trả qua QR.
+
+## Tech Stack
+
+- **Frontend**: React 19, Rsbuild, shadcn/ui, TanStack Router, TanStack Query
+- **Backend**: Go 1.25, Gin, sqlc, MySQL 8.4
+- **Payments**: payOS ( VietQR )
+- **Infrastructure**: Docker Compose
 
 ## Quick Start
 
 ### 1. Prerequisites
 
 - Docker & Docker Compose
-- Go 1.21+
-- Node.js 18+
-- pnpm
+- Go 1.25+
+- Node.js 22+
+- pnpm 10+
 
-### 2. Setup payOS Credentials
-
-Đăng ký tài khoản payOS tại [https://my.payos.vn](https://my.payos.vn) để lấy:
-- `PAYOS_CLIENT_ID`
-- `PAYOS_API_KEY`
-- `PAYOS_CHECKSUM_KEY`
-
-### 3. Run với Docker
+### 2. Clone & Setup
 
 ```bash
-# Copy và edit .env (điền payOS credentials)
-cp backend/.env.example backend/.env
+git clone https://github.com/datisekai/longthu.fun.git
+cd longthu.fun
 
-# Chạy MySQL + Backend + Frontend
+# Copy env files
+cp backend/.env.example backend/.env
+```
+
+### 3. Configure Environment
+
+Edit `backend/.env`:
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `DATABASE_URL` | MySQL connection string | ✅ |
+| `JWT_SECRET` | JWT signing secret (`openssl rand -hex 32`) | ✅ |
+| `SECRETS_MASTER_KEY` | AES key for encrypting payOS credentials (32 chars) | ✅ |
+| `APP_BASE_URL` | Frontend URL (e.g. https://longthu.fun) | ✅ |
+| `PORT` | Backend port (default: 8080) | Optional |
+| `ADMIN_EMAIL` | Admin account email | Optional |
+| `ADMIN_PASSWORD` | Admin account password | Optional |
+| `PAYOS_CLIENT_ID` | payOS Client ID | For auto-detect |
+| `PAYOS_API_KEY` | payOS API Key | For auto-detect |
+| `PAYOS_CHECKSUM_KEY` | payOS Checksum Key | For auto-detect |
+
+### 4. Run with Docker
+
+```bash
+# Start all services (MySQL + Backend + Frontend)
 docker compose --profile full up -d
 
-# Apply migrations
+# Apply database migrations
 docker compose exec backend make migrate-up
 ```
 
-Truy cập: http://localhost:5173
+Access: http://localhost:5173
 
-### 4. Run Backend (Local dev)
+### 5. Local Development
 
 ```bash
 # Terminal 1: MySQL
@@ -41,76 +65,53 @@ docker compose up mysql -d
 
 # Terminal 2: Backend
 cd backend
-cp .env.example .env
-# Edit .env với credentials của bạn
 go install github.com/air-verse/air@latest
 make migrate-up
-make run
-# Server chạy tại http://localhost:8080
+make run          # hot-reload via Air
 
 # Terminal 3: Frontend
 cd frontend
 pnpm install
 pnpm dev
-# App chạy tại http://localhost:5173
 ```
 
-### 5. Run Frontend (Local dev)
+## Database Migrations
 
 ```bash
-cd frontend
-pnpm install
-pnpm dev
+cd backend
+make migrate-create name=your_migration
+# Edit migrations/xxxx_your_migration.up.sql
+make migrate-up
+make migrate-down
 ```
-
-## Environment Variables
-
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `DATABASE_URL` | MySQL connection string | ✅ |
-| `JWT_SECRET` | JWT signing secret (generate: `openssl rand -hex 32`) | ✅ |
-| `SECRETS_MASTER_KEY` | AES encryption key for payOS credentials | ✅ |
-| `PAYOS_CLIENT_ID` | payOS Client ID | ✅ cho Auto-Detect |
-| `PAYOS_API_KEY` | payOS API Key | ✅ cho Auto-Detect |
-| `PAYOS_CHECKSUM_KEY` | payOS Checksum Key | ✅ cho Auto-Detect |
-| `APP_BASE_URL` | Frontend URL (default: http://localhost:5173) | Optional |
-| `PORT` | Backend port (default: 8080) | Optional |
 
 ## Architecture
 
 ```
-frontend/          # React 19 + Rsbuild + shadcn/ui
+frontend/                    # React 19 + Rsbuild
+  src/
+    routes/                 # TanStack Router file-based routes
+    components/             # Shared UI components
+    hooks/                  # Custom React hooks
+    lib/                    # API client, utils
+
 backend/
-  cmd/api/         # HTTP entry point
+  cmd/api/                  # HTTP entry point
   internal/
-    auth/         # JWT authentication
-    dashboard/     # Host dashboard
-    groups/        # Group management
-    players/       # Player management
-    sessions/      # Session & charge management
-    paymentintents/ # Payment intent creation
-    payments/      # Payment matching & webhook handling
-    webhooks/      # payOS webhook endpoints
-    autodetect/    # Auto-detect setup & management
-    public/        # Public endpoints (/g/, /p/, /pay/)
+    auth/                   # JWT authentication
+    admin/                  # Admin dashboard (tier management)
+    autodetect/             # Auto-detect payOS setup
+    bankaccounts/           # Host bank account management
+    dashboard/               # Host dashboard API
+    db/                     # sqlc generated code + SQL queries
+    groups/                 # Group management
+    payments/               # Payment matching logic
+    players/                # Player management
+    paymentintents/         # Payment intent creation
+    public/                 # Public endpoints (group bill, player ledger)
+    sessions/               # Session & charge management
+    webhooks/               # payOS webhook endpoints
 ```
-
-## Key Endpoints
-
-### Public (no auth)
-- `GET /api/v1/group-bill/:shareCode` - Group bill page
-- `GET /api/v1/player-ledger/:playerCode` - Player ledger
-- `POST /api/v1/payment-intents` - Create payment intent
-- `GET /api/v1/payment-intents/:code` - Get payment intent status
-- `POST /api/v1/webhooks/payos` - payOS webhook
-
-### Authenticated
-- `POST /api/v1/auth/register` - Register host
-- `POST /api/v1/auth/login` - Login
-- `GET /api/v1/groups` - List groups
-- `POST /api/v1/sessions` - Create session
-- `PATCH /api/v1/sessions/:id/finalize` - Finalize session
-- `GET /api/v1/dashboard` - Host dashboard
 
 ## Testing Flow
 
@@ -121,21 +122,35 @@ backend/
 5. **Create Session** → Tạo buổi với cost items
 6. **Finalize** → Chốt bill, generate share code
 7. **Share Link** → Copy link gửi cho players
-8. **Player Pays** → Player vào `/p/:code` → tạo QR → chuyển tiền
+8. **Player Pays** → Player vào `/p/:code` → tạo VietQR → chuyển tiền
 9. **Host Confirms** → Host đánh dấu đã nhận tiền
 
-## Development
+## Development Scripts
 
 ```bash
 # Backend
-make build          # Build
+make build          # Build binary
 make test           # Run tests
-make sqlc-generate  # Regenerate DB queries
+make sqlc-generate   # Regenerate DB queries
+make migrate-up     # Run pending migrations
+make migrate-down   # Rollback last migration
 
 # Frontend
+pnpm dev            # Dev server with hot-reload
 pnpm build          # Production build
+pnpm preview        # Preview production build
+pnpm typecheck       # TypeScript check
+pnpm lint           # ESLint
 pnpm test           # Run tests
 ```
+
+## CI/CD
+
+GitHub Actions runs on every push/PR to `main`:
+
+- **Backend**: go vet, build, tests, gitleaks scan
+- **Frontend**: typecheck, lint, test, build, Lighthouse audit
+- **Docker**: multi-stage build sanity check
 
 ## License
 
