@@ -1,22 +1,20 @@
 import { defineConfig } from 'eslint/config';
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
+import hooks from 'eslint-plugin-react-hooks';
 
 export default defineConfig([
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ['src/**/*.{ts,tsx}'],
-    languageOptions: {
-      parserOptions: {
-        project: './tsconfig.json',
-        tsconfigRootDir: import.meta.dirname,
-      },
+    plugins: {
+      'react-hooks': hooks,
     },
     rules: {
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
       '@typescript-eslint/no-explicit-any': 'warn',
       'no-console': ['warn', { allow: ['warn', 'error'] }],
+      'react-hooks/exhaustive-deps': 'warn',
     },
   },
   {
@@ -27,7 +25,8 @@ export default defineConfig([
       'rsbuild.config.ts',
       'postcss.config.mjs',
       'eslint.config.mjs',
-      '*.gen.ts',
+      '**/*.gen.ts',
+      '**/routeTree.gen.ts',
     ],
   },
 ]);

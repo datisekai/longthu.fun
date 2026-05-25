@@ -1,10 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useToast } from '@/components/ui/toast';
 import { ApiError, apiRequest } from '@/lib/api';
 import { formatMoney } from '@/lib/money';
 import { vi } from '@/locales/vi';
 import type { CostItem, CostItemType, FinalizeResponse, Player, Session } from '@/types/api';
+
+// Default labels per cost type (auto-applied, user never has to type them)
+const COST_TYPE_DEFAULTS: Record<CostItemType, string> = {
+  court: 'Sân',
+  shuttle: 'Cầu lông',
+  water: 'Nước uống',
+  other: 'Khác',
+  discount: 'Giảm giá',
+};
 
 const COST_TYPES: CostItemType[] = ['court', 'shuttle', 'water', 'other', 'discount'];
 
@@ -52,6 +63,7 @@ interface SessionDraftStepProps {
 
 export function SessionDraftStep({ groupId, onSaved, onComplete }: SessionDraftStepProps) {
   const qc = useQueryClient();
+  const { fire } = useToast();
   const [date, setDate] = useState(todayInVN());
   const [title, setTitle] = useState('');
   const [location, setLocation] = useState('');
@@ -60,9 +72,8 @@ export function SessionDraftStep({ groupId, onSaved, onComplete }: SessionDraftS
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [finalizeResult, setFinalizeResult] = useState<FinalizeResponse | null>(null);
   const [copiedType, setCopiedType] = useState<'link' | 'message' | null>(null);
-  const [pendingItem, setPendingItem] = useState<{ type: CostItemType; label: string; amount: string }>({
+  const [pendingItem, setPendingItem] = useState<{ type: CostItemType; amount: string }>({
     type: 'court',
-    label: '',
     amount: '',
   });
   const [pendingError, setPendingError] = useState<string | null>(null);
@@ -80,7 +91,8 @@ export function SessionDraftStep({ groupId, onSaved, onComplete }: SessionDraftS
     if (playersQuery.data && participantIDs.length === 0) {
       setParticipantIDs(playersQuery.data.map((p) => p.id));
     }
-  }, [playersQuery.data]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playersQuery.data]);
 
   // Mutations.
   const createDraft = useMutation({
@@ -94,6 +106,9 @@ export function SessionDraftStep({ groupId, onSaved, onComplete }: SessionDraftS
         method: 'POST',
         body: { ...vars.item, isIncludedInSplit: true },
       }),
+    onSuccess: () => {
+      fire({ title: 'Đã thêm khoản chi', variant: 'success' });
+    },
   });
 
   const removeItem = useMutation({
@@ -134,18 +149,14 @@ export function SessionDraftStep({ groupId, onSaved, onComplete }: SessionDraftS
       setPendingError(vi.onboarding.session.errors.amountInvalid);
       return;
     }
-    const label = pendingItem.label.trim();
-    if (!label) {
-      setPendingError(vi.onboarding.session.errors.labelRequired);
-      return;
-    }
     const sid = await ensureDraft();
+    const label = COST_TYPE_DEFAULTS[pendingItem.type];
     const item = await addItem.mutateAsync({
       sessionId: sid,
       item: { type: pendingItem.type, label, amount },
     });
     setCostItems((prev) => [...prev, item]);
-    setPendingItem({ type: 'court', label: '', amount: '' });
+    setPendingItem({ type: 'court', amount: '' });
   }
 
   async function handleRemoveItem(itemId: number) {
@@ -191,6 +202,7 @@ export function SessionDraftStep({ groupId, onSaved, onComplete }: SessionDraftS
       setFinalizeResult(result);
       qc.invalidateQueries({ queryKey: ['sessions', sid] });
       onComplete?.(result);
+      fire({ title: 'Đã chốt bill! 🎉', description: 'Copy link gửi cho mấy con vợ nào', variant: 'success' });
     } catch {
       // Error is handled by finalize.isError
     }
@@ -200,6 +212,7 @@ export function SessionDraftStep({ groupId, onSaved, onComplete }: SessionDraftS
     if (!finalizeResult) return;
     await navigator.clipboard.writeText(finalizeResult.shareUrl);
     setCopiedType('link');
+    fire({ title: 'Đã copy link!', variant: 'success' });
     setTimeout(() => setCopiedType(null), 2000);
   }
 
@@ -220,6 +233,7 @@ ${finalizeResult.shareUrl}`;
   async function handleCopyMessage() {
     await navigator.clipboard.writeText(getShareMessage());
     setCopiedType('message');
+    fire({ title: 'Đã copy tin nhắn!', description: 'Paste vào nhóm đi', variant: 'success' });
     setTimeout(() => setCopiedType(null), 2000);
   }
 
@@ -306,27 +320,22 @@ ${finalizeResult.shareUrl}`;
               </li>
             ))}
           </ul>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[100px_1fr_140px]">
-            <select
+          <div className="grid grid-cols-[120px_1fr] gap-2">
+            <Select
               value={pendingItem.type}
-              onChange={(e) => setPendingItem((p) => ({ ...p, type: e.target.value as CostItemType }))}
-              className="flex h-11 rounded-md border border-input bg-muted px-3 py-2 text-sm text-foreground"
-              aria-label={vi.onboarding.session.costTypeLabel}
+              onValueChange={(v) => setPendingItem((p) => ({ ...p, type: v as CostItemType }))}
             >
-              {COST_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {vi.onboarding.session.costTypes[t]}
-                </option>
-              ))}
-            </select>
-            <input
-              type="text"
-              value={pendingItem.label}
-              onChange={(e) => setPendingItem((p) => ({ ...p, label: e.target.value }))}
-              placeholder={vi.onboarding.session.costLabelPlaceholder}
-              aria-label={vi.onboarding.session.costLabelLabel}
-              className="flex h-11 rounded-md border border-input bg-muted px-3 py-2 text-sm text-foreground"
-            />
+              <SelectTrigger aria-label={vi.onboarding.session.costTypeLabel}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {COST_TYPES.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {vi.onboarding.session.costTypes[t]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <input
               type="text"
               inputMode="numeric"
@@ -334,7 +343,7 @@ ${finalizeResult.shareUrl}`;
               onChange={(e) => setPendingItem((p) => ({ ...p, amount: e.target.value }))}
               placeholder={vi.onboarding.session.costAmountPlaceholder}
               aria-label={vi.onboarding.session.costAmountLabel}
-              className="flex h-11 rounded-md border border-input bg-muted px-3 py-2 text-sm text-foreground"
+              className="flex h-11 rounded-md border border-input bg-muted px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
           </div>
           {pendingError ? (

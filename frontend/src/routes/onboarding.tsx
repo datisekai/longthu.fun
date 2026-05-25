@@ -1,12 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { Button } from '@/components/ui/button';
 import { FormField } from '@/components/ui/form-field';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { ApiError, apiRequest } from '@/lib/api';
 import { vi } from '@/locales/vi';
@@ -42,7 +43,7 @@ type GroupValues = z.infer<typeof groupSchema>;
 // Tier → max active Players per Group (mirrors backend constants in
 // internal/players/service.go). The form caps client-side; the server
 // re-enforces and is the source of truth.
-const tierCaps = { free: 6, pro: 8, pro_plus: 15 } as const;
+const tierCaps = { free: 8, pro: 20, pro_plus: Infinity } as const;
 export function capForTier(tier: PublicUser['tier'] | undefined): number {
   if (tier === 'pro') return tierCaps.pro;
   if (tier === 'pro_plus') return tierCaps.pro_plus;
@@ -113,7 +114,13 @@ function OnboardingRoute() {
 }
 
 export function OnboardingPage() {
-  const [step, setStep] = useState<Step>(1);
+  const { data: banks } = useQuery({
+    queryKey: ['bank-accounts'],
+    queryFn: () => apiRequest<{ bankAccounts: BankAccount[] }>('/api/v1/bank-accounts'),
+  });
+
+  // Skip bank step if user already has at least one account.
+  const [step, setStep] = useState<Step>(banks?.bankAccounts?.length ? 2 : 1);
   const [group, setGroup] = useState<Group | null>(null);
 
   return (
@@ -180,18 +187,31 @@ function BankStep({ onSuccess }: { onSuccess: () => void }) {
           <label className="text-sm font-medium leading-none text-foreground" htmlFor="bank-code">
             {vi.onboarding.bank.bankLabel}
           </label>
-          <select
-            id="bank-code"
-            className="flex h-11 w-full rounded-md border border-input bg-muted px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-            aria-invalid={form.formState.errors.bankCode ? 'true' : undefined}
-            {...form.register('bankCode')}
-          >
-            {bankOptions.map((bank) => (
-              <option key={bank.code} value={bank.code}>
-                {bank.label}
-              </option>
-            ))}
-          </select>
+          <Controller
+            name="bankCode"
+            control={form.control}
+            render={({ field }: { field: { value: string; onChange: (v: string) => void } }) => (
+              <Select
+                value={field.value}
+                onValueChange={field.onChange}
+              >
+                <SelectTrigger
+                  id="bank-code"
+                  aria-invalid={!!form.formState.errors.bankCode}
+                  error={!!form.formState.errors.bankCode}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {bankOptions.map((bank) => (
+                    <SelectItem key={bank.code} value={bank.code}>
+                      {bank.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          />
           {form.formState.errors.bankCode ? (
             <p className="text-xs text-destructive" role="alert">
               {form.formState.errors.bankCode.message}

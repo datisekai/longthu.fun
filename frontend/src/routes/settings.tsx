@@ -114,7 +114,7 @@ function SettingsPage() {
               <p className="font-medium text-accent">PRO - 50k/tháng</p>
               <ul className="text-sm text-muted-foreground space-y-1">
                 <li>Auto-detect: không cần tick tay từng người</li>
-                <li>Tối đa 8 người/group</li>
+                <li>Tối đa 20 người/group</li>
                 <li>Hỗ trợ ưu tiên</li>
               </ul>
             </div>
@@ -134,7 +134,7 @@ function SettingsPage() {
               <p className="font-medium text-purple-400">PRO Plus - 100k/tháng</p>
               <ul className="text-sm text-muted-foreground space-y-1">
                 <li>Auto-detect: không cần tick tay từng người</li>
-                <li>Tối đa 15 người/group</li>
+                <li>Không giới hạn người chơi</li>
                 <li>Hỗ trợ ưu tiên cao cấp</li>
               </ul>
             </div>

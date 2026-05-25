@@ -59,7 +59,7 @@ func TestFinalize_HappyPath(t *testing.T) {
 	cookie := registerHost(t, router, email)
 	addBank(t, router, cookie)
 	groupID := createGroup(t, router, cookie, "Finalize happy")
-	// Free tier cap is 6 players; 600001 / 6 = 100000.166... so the
+	// Free tier cap is 8 players; 600001 / 8 = 75000.125 so the
 	// distributeSplit residual path gets exercised (first player gets +1).
 	sessionID, playerIDs := seedDraft(t, router, cookie, groupID,
 		[]string{"A", "B", "C", "D", "E", "F"},

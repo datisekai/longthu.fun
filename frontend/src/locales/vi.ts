@@ -166,7 +166,7 @@ export const vi = {
     // Story 1.9 — bulk-add Players.
     players: {
       title: 'Thêm các con vợ vào group',
-      subtitle: 'Mỗi dòng là 1 tên người chơi. Tối đa theo gói: Free 6, PRO 8, PRO Plus 15.',
+      subtitle: 'Mỗi dòng là 1 tên người chơi. Tối đa theo gói: Free 8, PRO 20, PRO Plus không giới hạn.',
       namesLabel: 'Danh sách người chơi',
       namesPlaceholder: 'Đạt\nLý\nTâm\nHùng',
       helper: 'Tên giữ nguyên dấu tiếng Việt. Trùng tên trong group sẽ bị từ chối.',

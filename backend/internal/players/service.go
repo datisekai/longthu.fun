@@ -16,11 +16,11 @@ import (
 	"github.com/datisekai/longthu.fun/backend/internal/shortcode"
 )
 
-// Tier caps come from PRD §4.2 FR-6.
+// Tier caps come from PRD §4.2 FR-6. 0 = unlimited.
 const (
-	freeCap    = 6
-	proCap     = 8
-	proPlusCap = 15
+	freeCap    = 8
+	proCap     = 20
+	proPlusCap = 0 // unlimited
 )
 
 // playerCodeLength is the per-Player short code length per FR-30.
@@ -101,12 +101,12 @@ func (s *Service) BulkCreate(ctx context.Context, hostID uint64, groupID uint64,
 			return fmt.Errorf("players.BulkCreate: group check: %w", err)
 		}
 
-		// Tier cap check (live count + new count ≤ cap).
+		// Tier cap check (live count + new count ≤ cap; skip when cap is 0 = unlimited).
 		currentCount, err := q.CountActivePlayersInGroup(ctx, groupID)
 		if err != nil {
 			return fmt.Errorf("players.BulkCreate: count: %w", err)
 		}
-		if int(currentCount)+len(cleaned) > cap {
+		if cap > 0 && int(currentCount)+len(cleaned) > cap {
 			return &TypedError{
 				Inner: ErrTierCapExceeded,
 				Cap: CapExceededDetail{
@@ -263,7 +263,7 @@ func capForTier(tier string) int {
 	case "pro":
 		return proCap
 	case "pro_plus":
-		return proPlusCap
+		return proPlusCap // 0 = unlimited
 	default:
 		return freeCap
 	}

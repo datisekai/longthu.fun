@@ -4,6 +4,7 @@ import { formatMoney } from '@/lib/money';
 import { vi } from '@/locales/vi';
 import { apiRequest } from '@/lib/api';
 import { Button } from '@/components/ui/button';
+import { useAuthSession } from '@/hooks/useAuthSession';
 
 export const Route = createFileRoute('/dashboard')({
   component: DashboardPage,
@@ -53,10 +54,10 @@ function ActionBanner({ sessionCount, tier, suspectedCount, hasGroup }: {
     return (
       <div className="rounded-md border border-primary/40 bg-primary/10 p-4 text-center">
         <p className="text-muted-foreground">Chưa có buổi nào hết á 🏸</p>
-        <p className="mt-1 text-sm">Đánh xong nhớ tạo session liền nha</p>
+        <p className="mt-1 text-sm">Đánh xong nhớ tạo buổi liền nha</p>
         <Link to="/onboarding">
           <Button variant="primary" size="lg" className="mt-3 w-full">
-            {hasGroup ? '+ Tạo session' : '+ Tạo nhóm & session'}
+            {hasGroup ? '+ Tạo buổi đánh' : '+ Tạo nhóm & buổi đánh'}
           </Button>
         </Link>
       </div>
@@ -120,6 +121,8 @@ function DashboardPage() {
     staleTime: 60000,
   });
 
+  const { logout } = useAuthSession();
+
   if (isLoading) {
     return (
       <main className="mx-auto flex min-h-screen w-full max-w-md flex-col items-center justify-center gap-4 px-4 py-8">
@@ -134,9 +137,21 @@ function DashboardPage() {
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-6 px-4 py-8">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-bold font-display text-primary">{vi.app.name}</h1>
-        <p className="text-sm text-muted-foreground">{vi.dashboard.title}</p>
+      <header className="flex items-start justify-between">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-bold font-display text-primary">{vi.app.name}</h1>
+          <p className="text-sm text-muted-foreground">{vi.dashboard.title}</p>
+        </div>
+        <button
+          onClick={() => {
+            logout.mutate(undefined, {
+              onSuccess: () => { window.location.href = '/login'; },
+            });
+          }}
+          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          {vi.auth.logout}
+        </button>
       </header>
 
       {/* Action banner */}
@@ -229,7 +244,7 @@ function DashboardPage() {
       <div className="flex gap-2">
         <Link to="/onboarding" className="flex-1">
           <Button variant="primary" size="lg" className="w-full">
-            + Tạo session
+            + Tạo buổi đánh
           </Button>
         </Link>
       </div>
