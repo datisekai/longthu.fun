@@ -30,6 +30,7 @@ func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
 	r.PUT("/sessions/:sessionId/participants", h.handleSetParticipants)
 	r.POST("/sessions/:sessionId/finalize", h.handleFinalize)
 	r.PATCH("/session-charges/:chargeId", h.handlePatchCharge)
+	r.POST("/session-charges/batch-patch", h.handleBatchPatchCharge)
 }
 
 func (h *Handler) handleCreateDraft(c *gin.Context) {
@@ -306,4 +307,45 @@ func (h *Handler) handlePatchCharge(c *gin.Context) {
 	default:
 		httpx.Reply(c, http.StatusInternalServerError, "Lỗi server", "")
 	}
+}
+
+type batchPatchChargeReq struct {
+	ChargeIDs []uint64 `json:"chargeIds"`
+	Action   string    `json:"action"` // "confirm_paid" | "undo_paid"
+}
+
+func (h *Handler) handleBatchPatchCharge(c *gin.Context) {
+	hostID, ok := tenant.HostID(c)
+	if !ok {
+		httpx.Reply(c, http.StatusUnauthorized, "Chưa đăng nhập", "")
+		return
+	}
+	var req batchPatchChargeReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.Reply(c, http.StatusBadRequest, "Yêu cầu sai định dạng", "")
+		return
+	}
+	if len(req.ChargeIDs) == 0 {
+		httpx.Reply(c, http.StatusBadRequest, "Không có charge nào", "")
+		return
+	}
+
+	results := make([]PatchChargeResult, 0, len(req.ChargeIDs))
+	for _, chargeID := range req.ChargeIDs {
+		charge, err := h.svc.PatchCharge(c.Request.Context(), hostID, chargeID, req.Action)
+		if err == nil {
+			result := PatchChargeResult{
+				ID:     charge.ID,
+				Status: charge.Status,
+			}
+			if charge.PaidAt.Valid {
+				result.PaidAt = charge.PaidAt.Time.Format(time.RFC3339)
+			}
+			if charge.PaidVia.Valid {
+				result.PaidVia = charge.PaidVia.String
+			}
+			results = append(results, result)
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"results": results})
 }
