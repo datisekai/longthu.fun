@@ -585,7 +585,7 @@ func dedupUint64(in []uint64) []uint64 {
 	return out
 }
 
-func (s *Service) PatchCharge(ctx context.Context, hostID uint64, chargeID uint64, action string) (dbgen.GetChargeByIDForHostRow, error) {
+func (s *Service) PatchCharge(ctx context.Context, hostID uint64, chargeID uint64, action string, note string) (dbgen.GetChargeByIDForHostRow, error) {
 	q := dbgen.New(s.db)
 
 	// Tenant-isolated read
@@ -629,6 +629,21 @@ func (s *Service) PatchCharge(ctx context.Context, hostID uint64, chargeID uint6
 		})
 		if err != nil {
 			return dbgen.GetChargeByIDForHostRow{}, fmt.Errorf("undo paid: %w", err)
+		}
+		return q.GetChargeByIDForHost(ctx, dbgen.GetChargeByIDForHostParams{
+			ID:        chargeID,
+			HostUserID: hostID,
+		})
+
+	case "waive":
+		noteStr := strings.TrimSpace(note)
+		err = q.UpdateChargeStatusWaived(ctx, dbgen.UpdateChargeStatusWaivedParams{
+			Status: "waived",
+			Description: sql.NullString{String: noteStr, Valid: noteStr != ""},
+			ID: chargeID,
+		})
+		if err != nil {
+			return dbgen.GetChargeByIDForHostRow{}, fmt.Errorf("waive charge: %w", err)
 		}
 		return q.GetChargeByIDForHost(ctx, dbgen.GetChargeByIDForHostParams{
 			ID:        chargeID,

@@ -24,6 +24,10 @@ func NewHandler(svc *Service) *Handler {
 func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
 	r.POST("/groups/:groupId/players", h.handleBulkCreate)
 	r.GET("/groups/:groupId/players", h.handleListActive)
+	r.PATCH("/groups/:groupId/players/:playerId", h.handleUpdate)
+	r.POST("/groups/:groupId/players/:playerId/deactivate", h.handleDeactivate)
+	r.POST("/groups/:groupId/players/:playerId/reactivate", h.handleReactivate)
+	r.POST("/groups/:groupId/players/:playerId/reset-code", h.handleResetCode)
 }
 
 type bulkCreateReq struct {
@@ -108,6 +112,145 @@ func (h *Handler) handleListActive(c *gin.Context) {
 		return
 	}
 	httpx.Reply(c, http.StatusInternalServerError, "Không đọc được danh sách người chơi", "")
+}
+
+type updatePlayerReq struct {
+	DisplayName string `json:"displayName"`
+}
+
+func (h *Handler) handleUpdate(c *gin.Context) {
+	hostID, ok := tenant.HostID(c)
+	if !ok {
+		httpx.Reply(c, http.StatusUnauthorized, "Chưa đăng nhập", "")
+		return
+	}
+
+	groupID, err := strconv.ParseUint(c.Param("groupId"), 10, 64)
+	if err != nil || groupID == 0 {
+		httpx.Reply(c, http.StatusNotFound, "Not found", "")
+		return
+	}
+
+	playerID, err := strconv.ParseUint(c.Param("playerId"), 10, 64)
+	if err != nil || playerID == 0 {
+		httpx.Reply(c, http.StatusNotFound, "Not found", "")
+		return
+	}
+
+	var req updatePlayerReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.Reply(c, http.StatusBadRequest, "Yêu cầu sai định dạng", err.Error())
+		return
+	}
+
+	player, err := h.svc.Update(c.Request.Context(), hostID, groupID, playerID, req.DisplayName)
+	if err == nil {
+		c.JSON(http.StatusOK, player)
+		return
+	}
+
+	switch {
+	case errors.Is(err, ErrNotFound):
+		httpx.Reply(c, http.StatusNotFound, "Not found", "")
+	case errors.Is(err, ErrDuplicateAgainstRoster):
+		httpx.Reply(c, http.StatusConflict, "Tên trùng nhau",
+			"Tên này đã có trong nhóm rồi")
+	default:
+		httpx.Reply(c, http.StatusInternalServerError, "Không cập nhật được", "")
+	}
+}
+
+func (h *Handler) handleDeactivate(c *gin.Context) {
+	hostID, ok := tenant.HostID(c)
+	if !ok {
+		httpx.Reply(c, http.StatusUnauthorized, "Chưa đăng nhập", "")
+		return
+	}
+
+	groupID, err := strconv.ParseUint(c.Param("groupId"), 10, 64)
+	if err != nil || groupID == 0 {
+		httpx.Reply(c, http.StatusNotFound, "Not found", "")
+		return
+	}
+
+	playerID, err := strconv.ParseUint(c.Param("playerId"), 10, 64)
+	if err != nil || playerID == 0 {
+		httpx.Reply(c, http.StatusNotFound, "Not found", "")
+		return
+	}
+
+	err = h.svc.Deactivate(c.Request.Context(), hostID, groupID, playerID)
+	if err == nil {
+		c.JSON(http.StatusOK, gin.H{"inactive": true})
+		return
+	}
+	if errors.Is(err, ErrNotFound) {
+		httpx.Reply(c, http.StatusNotFound, "Not found", "")
+		return
+	}
+	httpx.Reply(c, http.StatusInternalServerError, "Không lưu được", "")
+}
+
+func (h *Handler) handleReactivate(c *gin.Context) {
+	hostID, ok := tenant.HostID(c)
+	if !ok {
+		httpx.Reply(c, http.StatusUnauthorized, "Chưa đăng nhập", "")
+		return
+	}
+
+	groupID, err := strconv.ParseUint(c.Param("groupId"), 10, 64)
+	if err != nil || groupID == 0 {
+		httpx.Reply(c, http.StatusNotFound, "Not found", "")
+		return
+	}
+
+	playerID, err := strconv.ParseUint(c.Param("playerId"), 10, 64)
+	if err != nil || playerID == 0 {
+		httpx.Reply(c, http.StatusNotFound, "Not found", "")
+		return
+	}
+
+	err = h.svc.Reactivate(c.Request.Context(), hostID, groupID, playerID)
+	if err == nil {
+		c.JSON(http.StatusOK, gin.H{"active": true})
+		return
+	}
+	if errors.Is(err, ErrNotFound) {
+		httpx.Reply(c, http.StatusNotFound, "Not found", "")
+		return
+	}
+	httpx.Reply(c, http.StatusInternalServerError, "Không khôi phục được", "")
+}
+
+func (h *Handler) handleResetCode(c *gin.Context) {
+	hostID, ok := tenant.HostID(c)
+	if !ok {
+		httpx.Reply(c, http.StatusUnauthorized, "Chưa đăng nhập", "")
+		return
+	}
+
+	groupID, err := strconv.ParseUint(c.Param("groupId"), 10, 64)
+	if err != nil || groupID == 0 {
+		httpx.Reply(c, http.StatusNotFound, "Not found", "")
+		return
+	}
+
+	playerID, err := strconv.ParseUint(c.Param("playerId"), 10, 64)
+	if err != nil || playerID == 0 {
+		httpx.Reply(c, http.StatusNotFound, "Not found", "")
+		return
+	}
+
+	player, err := h.svc.ResetCode(c.Request.Context(), hostID, groupID, playerID)
+	if err == nil {
+		c.JSON(http.StatusOK, player)
+		return
+	}
+	if errors.Is(err, ErrNotFound) {
+		httpx.Reply(c, http.StatusNotFound, "Not found", "")
+		return
+	}
+	httpx.Reply(c, http.StatusInternalServerError, "Không reset được code", "")
 }
 
 func displayTier(t string) string {

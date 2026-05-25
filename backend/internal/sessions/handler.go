@@ -258,7 +258,8 @@ func (h *Handler) handleFinalize(c *gin.Context) {
 }
 
 type patchChargeReq struct {
-	Action string `json:"action"` // "confirm_paid" | "undo_paid"
+	Action string `json:"action"` // "confirm_paid" | "undo_paid" | "waive"
+	Note  string `json:"note"`   // optional note for waive action
 }
 
 // PatchChargeResult is the response for charge patch operations.
@@ -286,7 +287,7 @@ func (h *Handler) handlePatchCharge(c *gin.Context) {
 		return
 	}
 
-	charge, err := h.svc.PatchCharge(c.Request.Context(), hostID, chargeID, req.Action)
+	charge, err := h.svc.PatchCharge(c.Request.Context(), hostID, chargeID, req.Action, req.Note)
 	if err == nil {
 		result := PatchChargeResult{
 			ID:     charge.ID,
@@ -311,7 +312,8 @@ func (h *Handler) handlePatchCharge(c *gin.Context) {
 
 type batchPatchChargeReq struct {
 	ChargeIDs []uint64 `json:"chargeIds"`
-	Action   string    `json:"action"` // "confirm_paid" | "undo_paid"
+	Action   string    `json:"action"` // "confirm_paid" | "undo_paid" | "waive"
+	Note     string    `json:"note"`   // optional note for waive action
 }
 
 func (h *Handler) handleBatchPatchCharge(c *gin.Context) {
@@ -332,7 +334,7 @@ func (h *Handler) handleBatchPatchCharge(c *gin.Context) {
 
 	results := make([]PatchChargeResult, 0, len(req.ChargeIDs))
 	for _, chargeID := range req.ChargeIDs {
-		charge, err := h.svc.PatchCharge(c.Request.Context(), hostID, chargeID, req.Action)
+		charge, err := h.svc.PatchCharge(c.Request.Context(), hostID, chargeID, req.Action, req.Note)
 		if err == nil {
 			result := PatchChargeResult{
 				ID:     charge.ID,

@@ -95,3 +95,28 @@ func (q *Queries) UpdateGroupTelegramChatID(ctx context.Context, arg UpdateGroup
 	_, err := q.db.ExecContext(ctx, updateGroupTelegramChatID, arg.TelegramChatID, arg.ID, arg.HostUserID)
 	return err
 }
+
+const updateGroupName = `-- name: UpdateGroupName :exec
+UPDATE ` + "`" + `groups` + "`" + ` SET name = ?, updated_at = NOW() WHERE id = ?
+`
+
+type UpdateGroupNameParams struct {
+	Name string
+	ID   uint64
+}
+
+// Story 4.1: Update group name
+func (q *Queries) UpdateGroupName(ctx context.Context, arg UpdateGroupNameParams) error {
+	_, err := q.db.ExecContext(ctx, updateGroupName, arg.Name, arg.ID)
+	return err
+}
+
+const archiveGroup = `-- name: ArchiveGroup :exec
+UPDATE ` + "`" + `groups` + "`" + ` SET archived_at = NOW() WHERE id = ?
+`
+
+// Story 4.1: Archive group (soft delete)
+func (q *Queries) ArchiveGroup(ctx context.Context, id uint64) error {
+	_, err := q.db.ExecContext(ctx, archiveGroup, id)
+	return err
+}

@@ -29,3 +29,19 @@ ORDER BY display_name;
 
 -- name: GetPlayerByID :one
 SELECT id, group_id, display_name, public_code, is_active FROM players WHERE id = ?;
+
+-- Story 4.3: Get player by ID for group (tenant-isolated)
+-- name: GetPlayerByIDForGroup :one
+SELECT id, group_id, display_name, public_code, is_active FROM players WHERE id = ? AND group_id = ?;
+
+-- Story 4.3: Update player name
+-- name: UpdatePlayerName :exec
+UPDATE players SET display_name = ?, updated_at = NOW() WHERE id = ?;
+
+-- Story 4.3: Update player active status
+-- name: UpdatePlayerActive :exec
+UPDATE players SET is_active = ?, updated_at = NOW() WHERE id = ?;
+
+-- Story 4.4: Update player public code
+-- name: UpdatePlayerPublicCode :exec
+UPDATE players SET public_code = ?, updated_at = NOW() WHERE id = ?;

@@ -76,3 +76,56 @@ func (q *Queries) InsertBankAccount(ctx context.Context, arg InsertBankAccountPa
 		arg.IsDefault,
 	)
 }
+
+const listBankAccountsForHost = `-- name: ListBankAccountsForHost :many
+SELECT id, user_id, bank_name, bank_code, account_number, account_holder_name, is_default,
+       default_flag, created_at, updated_at
+FROM bank_accounts
+WHERE user_id = ?
+ORDER BY is_default DESC, id ASC
+`
+
+// Story 4.2: List all bank accounts for host
+func (q *Queries) ListBankAccountsForHost(ctx context.Context, userID uint64) ([]BankAccount, error) {
+	rows, err := q.db.QueryContext(ctx, listBankAccountsForHost, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BankAccount
+	for rows.Next() {
+		var i BankAccount
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.BankName,
+			&i.BankCode,
+			&i.AccountNumber,
+			&i.AccountHolderName,
+			&i.IsDefault,
+			&i.DefaultFlag,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+// Story 4.2: Set bank account as default (two statements in one exec)
+func (q *Queries) SetDefaultBankAccount(ctx context.Context, userID uint64, bankID uint64) error {
+	_, err := q.db.ExecContext(ctx, "UPDATE bank_accounts SET is_default = 0 WHERE user_id = ?", userID)
+	if err != nil {
+		return err
+	}
+	_, err = q.db.ExecContext(ctx, "UPDATE bank_accounts SET is_default = 1 WHERE id = ?", bankID)
+	return err
+}

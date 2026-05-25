@@ -1,7 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { formatMoney } from '@/lib/money';
-import { vi } from '@/locales/vi';
 import { apiRequest } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 

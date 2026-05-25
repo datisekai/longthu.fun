@@ -1,7 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { formatMoney } from '@/lib/money';
-import { vi } from '@/locales/vi';
 import { apiRequest } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 
@@ -17,24 +16,10 @@ interface UnmatchedPayment {
 }
 
 function UnmatchedPage() {
-  const queryClient = useQueryClient();
-
   const { data: payments, isLoading } = useQuery({
     queryKey: ['dashboard', 'unmatched'],
     queryFn: () => apiRequest<{ payments: UnmatchedPayment[] }>('/api/v1/dashboard/unmatched'),
     refetchInterval: 30000,
-  });
-
-  const linkMutation = useMutation({
-    mutationFn: (vars: { paymentId: number; playerId: number; chargeIds: number[] }) =>
-      apiRequest(`/api/v1/payments/${vars.paymentId}/link`, {
-        method: 'POST',
-        body: { playerId: vars.playerId, chargeIds: vars.chargeIds },
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['dashboard', 'unmatched'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-    },
   });
 
   if (isLoading) {

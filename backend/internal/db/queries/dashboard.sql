@@ -32,6 +32,7 @@ LIMIT 5;
 SELECT
   p.id AS player_id,
   p.display_name AS player_name,
+  p.public_code AS player_code,
   g.id AS group_id,
   g.name AS group_name,
   COALESCE(SUM(sc.amount), 0) AS total_unpaid
@@ -42,7 +43,8 @@ JOIN sessions s ON s.id = sc.session_id
 WHERE g.host_user_id = ?
   AND sc.status IN ('unpaid', 'pending_confirmation', 'suspected')
   AND s.status = 'finalized'
-GROUP BY p.id, p.display_name, g.id, g.name
+  AND p.is_active = 1
+GROUP BY p.id, p.display_name, p.public_code, g.id, g.name
 ORDER BY total_unpaid DESC
 LIMIT 5;
 

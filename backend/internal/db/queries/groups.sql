@@ -18,3 +18,11 @@ VALUES (?, ?, ?);
 -- Story 5.2: Set Telegram chat ID
 -- name: UpdateGroupTelegramChatID :exec
 UPDATE `groups` SET telegram_chat_id = ? WHERE id = ? AND host_user_id = ?;
+
+-- Story 4.1: Update group name
+-- name: UpdateGroupName :exec
+UPDATE `groups` SET name = ?, updated_at = NOW() WHERE id = ?;
+
+-- Story 4.1: Archive group (soft delete)
+-- name: ArchiveGroup :exec
+UPDATE `groups` SET archived_at = NOW() WHERE id = ?;

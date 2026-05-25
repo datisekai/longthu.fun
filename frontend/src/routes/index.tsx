@@ -8,7 +8,7 @@ export const Route = createFileRoute('/')({
 });
 
 function HomePage() {
-  const { isAuthenticated, isLoading } = useAuthSession();
+  const { user, isLoading } = useAuthSession();
 
   if (isLoading) {
     return (
@@ -18,7 +18,7 @@ function HomePage() {
     );
   }
 
-  if (isAuthenticated) {
+  if (user) {
     window.location.href = '/dashboard';
     return (
       <main className="flex min-h-screen items-center justify-center">

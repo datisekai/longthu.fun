@@ -410,6 +410,22 @@ func (q *Queries) UpdateChargeWaived(ctx context.Context, id uint64) error {
 	return err
 }
 
+const updateChargeStatusWaived = `-- name: UpdateChargeStatusWaived :exec
+UPDATE session_charges SET status = ?, description = ? WHERE id = ?
+`
+
+type UpdateChargeStatusWaivedParams struct {
+	Status      string
+	Description sql.NullString
+	ID          uint64
+}
+
+// Story 4.7: Waive charge with note
+func (q *Queries) UpdateChargeStatusWaived(ctx context.Context, arg UpdateChargeStatusWaivedParams) error {
+	_, err := q.db.ExecContext(ctx, updateChargeStatusWaived, arg.Status, arg.Description, arg.ID)
+	return err
+}
+
 const updateSessionDraftMeta = `-- name: UpdateSessionDraftMeta :exec
 UPDATE sessions
 SET ` + "`" + `date` + "`" + ` = ?, title = ?, location = ?

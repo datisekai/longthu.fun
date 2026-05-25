@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/datisekai/longthu.fun/backend/internal/auth"
+	"github.com/datisekai/longthu.fun/backend/internal/admin"
 	"github.com/datisekai/longthu.fun/backend/internal/autodetect"
 	"github.com/datisekai/longthu.fun/backend/internal/bankaccounts"
 	"github.com/datisekai/longthu.fun/backend/internal/config"
@@ -106,6 +107,11 @@ func New(cfg *config.Config, db *sql.DB, gitSHA string) *Server {
 	// Webhook routes (Story 6.3) - public endpoint, no auth.
 	webhookHandler := webhooks.NewHandler(db, "webhook.longthu.fun")
 	webhookHandler.RegisterRoutes(r)
+
+	// Admin routes (Story 5.3)
+	adminHandler := admin.NewHandler(db, cfg.AdminEmail, cfg.AdminPassword)
+	adminGroup := r.Group("/admin")
+	adminHandler.RegisterRoutes(adminGroup)
 
 	return &Server{cfg: cfg, db: db, router: r}
 }

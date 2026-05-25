@@ -152,3 +152,71 @@ func (q *Queries) PlayerExistsByPublicCode(ctx context.Context, publicCode strin
 	err := row.Scan(&found)
 	return found, err
 }
+
+const getPlayerByIDForGroup = `-- name: GetPlayerByIDForGroup :one
+SELECT id, group_id, display_name, public_code, is_active FROM players WHERE id = ? AND group_id = ?
+`
+
+type GetPlayerByIDForGroupParams struct {
+	ID      uint64
+	GroupID uint64
+}
+
+// Story 4.3: Get player by ID for group (tenant-isolated)
+func (q *Queries) GetPlayerByIDForGroup(ctx context.Context, arg GetPlayerByIDForGroupParams) (GetPlayerByIDRow, error) {
+	row := q.db.QueryRowContext(ctx, getPlayerByIDForGroup, arg.ID, arg.GroupID)
+	var i GetPlayerByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.GroupID,
+		&i.DisplayName,
+		&i.PublicCode,
+		&i.IsActive,
+	)
+	return i, err
+}
+
+const updatePlayerName = `-- name: UpdatePlayerName :exec
+UPDATE players SET display_name = ?, updated_at = NOW() WHERE id = ?
+`
+
+type UpdatePlayerNameParams struct {
+	DisplayName string
+	ID          uint64
+}
+
+// Story 4.3: Update player name
+func (q *Queries) UpdatePlayerName(ctx context.Context, arg UpdatePlayerNameParams) error {
+	_, err := q.db.ExecContext(ctx, updatePlayerName, arg.DisplayName, arg.ID)
+	return err
+}
+
+const updatePlayerActive = `-- name: UpdatePlayerActive :exec
+UPDATE players SET is_active = ?, updated_at = NOW() WHERE id = ?
+`
+
+type UpdatePlayerActiveParams struct {
+	IsActive bool
+	ID       uint64
+}
+
+// Story 4.3: Update player active status
+func (q *Queries) UpdatePlayerActive(ctx context.Context, arg UpdatePlayerActiveParams) error {
+	_, err := q.db.ExecContext(ctx, updatePlayerActive, arg.IsActive, arg.ID)
+	return err
+}
+
+const updatePlayerPublicCode = `-- name: UpdatePlayerPublicCode :exec
+UPDATE players SET public_code = ?, updated_at = NOW() WHERE id = ?
+`
+
+type UpdatePlayerPublicCodeParams struct {
+	PublicCode string
+	ID         uint64
+}
+
+// Story 4.4: Update player public code
+func (q *Queries) UpdatePlayerPublicCode(ctx context.Context, arg UpdatePlayerPublicCodeParams) error {
+	_, err := q.db.ExecContext(ctx, updatePlayerPublicCode, arg.PublicCode, arg.ID)
+	return err
+}

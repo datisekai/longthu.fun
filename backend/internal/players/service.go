@@ -35,13 +35,14 @@ type PublicPlayer struct {
 	IsActive    bool   `json:"isActive"`
 }
 
-// Typed errors returned by BulkCreate, mapped to HTTP status by the handler.
+// Typed errors returned by BulkCreate, rename, reset-code, mark-inactive. Mapped to HTTP status by the handler.
 var (
 	ErrGroupNotFound          = errors.New("players: group not found for this host")
 	ErrNamesEmpty             = errors.New("players: at least one name required")
 	ErrTierCapExceeded        = errors.New("players: tier cap exceeded")
 	ErrDuplicateInSubmit      = errors.New("players: duplicate name in submission")
 	ErrDuplicateAgainstRoster = errors.New("players: name already in group roster")
+	ErrNotFound              = errors.New("players: not found")
 )
 
 // CapExceededDetail carries the cap + attempted total back to the handler.
@@ -266,4 +267,181 @@ func capForTier(tier string) int {
 	default:
 		return freeCap
 	}
+}
+
+// Update renames a player.
+func (s *Service) Update(ctx context.Context, hostID uint64, groupID uint64, playerID uint64, newName string) (PublicPlayer, error) {
+	newName = strings.TrimSpace(newName)
+	if newName == "" {
+		return PublicPlayer{}, ErrNamesEmpty
+	}
+
+	q := dbgen.New(s.db)
+
+	// Verify host owns group and player belongs to group
+	if _, err := q.GetGroupByIDForHost(ctx, dbgen.GetGroupByIDForHostParams{
+		ID: groupID, HostUserID: hostID,
+	}); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return PublicPlayer{}, ErrNotFound
+		}
+		return PublicPlayer{}, fmt.Errorf("players.Update: group: %w", err)
+	}
+
+	player, err := q.GetPlayerByIDForGroup(ctx, dbgen.GetPlayerByIDForGroupParams{
+		ID: playerID, GroupID: groupID,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return PublicPlayer{}, ErrNotFound
+		}
+		return PublicPlayer{}, fmt.Errorf("players.Update: player: %w", err)
+	}
+
+	// Check for duplicate name in group
+	existing, err := q.ListPlayerDisplayNamesInGroup(ctx, groupID)
+	if err != nil {
+		return PublicPlayer{}, fmt.Errorf("players.Update: list names: %w", err)
+	}
+	// Exclude current player from duplicate check
+	for _, name := range existing {
+		if strings.EqualFold(name, newName) && name != player.DisplayName {
+			return PublicPlayer{}, ErrDuplicateAgainstRoster
+		}
+	}
+
+	err = q.UpdatePlayerName(ctx, dbgen.UpdatePlayerNameParams{
+		DisplayName: newName,
+		ID:          playerID,
+	})
+	if err != nil {
+		return PublicPlayer{}, fmt.Errorf("players.Update: update: %w", err)
+	}
+
+	return PublicPlayer{
+		ID:          player.ID,
+		GroupID:     player.GroupID,
+		DisplayName: newName,
+		PublicCode:  player.PublicCode,
+		IsActive:    player.IsActive,
+	}, nil
+}
+
+// Deactivate marks a player as inactive.
+func (s *Service) Deactivate(ctx context.Context, hostID uint64, groupID uint64, playerID uint64) error {
+	q := dbgen.New(s.db)
+
+	// Verify ownership
+	if _, err := q.GetGroupByIDForHost(ctx, dbgen.GetGroupByIDForHostParams{
+		ID: groupID, HostUserID: hostID,
+	}); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("players.Deactivate: group: %w", err)
+	}
+
+	_, err := q.GetPlayerByIDForGroup(ctx, dbgen.GetPlayerByIDForGroupParams{
+		ID: playerID, GroupID: groupID,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("players.Deactivate: player: %w", err)
+	}
+
+	return q.UpdatePlayerActive(ctx, dbgen.UpdatePlayerActiveParams{
+		IsActive: false,
+		ID:       playerID,
+	})
+}
+
+// Reactivate marks a player as active.
+func (s *Service) Reactivate(ctx context.Context, hostID uint64, groupID uint64, playerID uint64) error {
+	q := dbgen.New(s.db)
+
+	// Verify ownership
+	if _, err := q.GetGroupByIDForHost(ctx, dbgen.GetGroupByIDForHostParams{
+		ID: groupID, HostUserID: hostID,
+	}); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("players.Reactivate: group: %w", err)
+	}
+
+	_, err := q.GetPlayerByIDForGroup(ctx, dbgen.GetPlayerByIDForGroupParams{
+		ID: playerID, GroupID: groupID,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("players.Reactivate: player: %w", err)
+	}
+
+	return q.UpdatePlayerActive(ctx, dbgen.UpdatePlayerActiveParams{
+		IsActive: true,
+		ID:       playerID,
+	})
+}
+
+// ResetCode generates a new public_code for a player.
+func (s *Service) ResetCode(ctx context.Context, hostID uint64, groupID uint64, playerID uint64) (PublicPlayer, error) {
+	q := dbgen.New(s.db)
+
+	// Verify ownership
+	if _, err := q.GetGroupByIDForHost(ctx, dbgen.GetGroupByIDForHostParams{
+		ID: groupID, HostUserID: hostID,
+	}); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return PublicPlayer{}, ErrNotFound
+		}
+		return PublicPlayer{}, fmt.Errorf("players.ResetCode: group: %w", err)
+	}
+
+	player, err := q.GetPlayerByIDForGroup(ctx, dbgen.GetPlayerByIDForGroupParams{
+		ID: playerID, GroupID: groupID,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return PublicPlayer{}, ErrNotFound
+		}
+		return PublicPlayer{}, fmt.Errorf("players.ResetCode: player: %w", err)
+	}
+
+	// Generate new unique code
+	newCode, err := shortcode.GenerateUnique(ctx, playerCodeLength, shortcode.PlayerCode, func(ctx context.Context, candidate string) (bool, error) {
+		return q.PlayerExistsByPublicCode(ctx, candidate)
+	})
+	if err != nil {
+		return PublicPlayer{}, fmt.Errorf("players.ResetCode: generate code: %w", err)
+	}
+
+	// Audit the reset
+	hostIDInt := int64(hostID)
+	_ = audit.Record(ctx, nil, audit.Event{
+		Type:       "player_code_reset",
+		ActorType:  audit.ActorHost,
+		HostUserID: &hostIDInt,
+		EntityType: "player",
+		EntityID:   int64(playerID),
+	})
+
+	err = q.UpdatePlayerPublicCode(ctx, dbgen.UpdatePlayerPublicCodeParams{
+		PublicCode: newCode,
+		ID:         playerID,
+	})
+	if err != nil {
+		return PublicPlayer{}, fmt.Errorf("players.ResetCode: update: %w", err)
+	}
+
+	return PublicPlayer{
+		ID:          player.ID,
+		GroupID:     player.GroupID,
+		DisplayName: player.DisplayName,
+		PublicCode:  newCode,
+		IsActive:    player.IsActive,
+	}, nil
 }

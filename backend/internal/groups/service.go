@@ -135,3 +135,69 @@ func toPublic(g dbgen.GetGroupByIDForHostRow) PublicGroup {
 	}
 	return out
 }
+
+func (s *Service) Update(ctx context.Context, hostID uint64, groupID uint64, name string) (PublicGroup, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return PublicGroup{}, ErrNameMissing
+	}
+	if len(name) > maxGroupNameLen {
+		return PublicGroup{}, fmt.Errorf("name too long")
+	}
+
+	q := dbgen.New(s.db)
+
+	// Verify ownership
+	_, err := q.GetGroupByIDForHost(ctx, dbgen.GetGroupByIDForHostParams{
+		ID:         groupID,
+		HostUserID: hostID,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return PublicGroup{}, ErrNotFound
+		}
+		return PublicGroup{}, fmt.Errorf("groups.Update: %w", err)
+	}
+
+	err = dbpkg.WithTx(ctx, s.db, func(tx *sql.Tx) error {
+		q := dbgen.New(tx)
+		return q.UpdateGroupName(ctx, dbgen.UpdateGroupNameParams{
+			Name: name,
+			ID:   groupID,
+		})
+	})
+	if err != nil {
+		return PublicGroup{}, fmt.Errorf("groups.Update: %w", err)
+	}
+
+	// Re-read
+	group, err := q.GetGroupByIDForHost(ctx, dbgen.GetGroupByIDForHostParams{
+		ID:         groupID,
+		HostUserID: hostID,
+	})
+	if err != nil {
+		return PublicGroup{}, fmt.Errorf("groups.Update: re-read: %w", err)
+	}
+	return toPublic(group), nil
+}
+
+func (s *Service) Archive(ctx context.Context, hostID uint64, groupID uint64) error {
+	q := dbgen.New(s.db)
+
+	// Verify ownership
+	_, err := q.GetGroupByIDForHost(ctx, dbgen.GetGroupByIDForHostParams{
+		ID:         groupID,
+		HostUserID: hostID,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("groups.Archive: %w", err)
+	}
+
+	return dbpkg.WithTx(ctx, s.db, func(tx *sql.Tx) error {
+		q := dbgen.New(tx)
+		return q.ArchiveGroup(ctx, groupID)
+	})
+}

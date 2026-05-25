@@ -39,6 +39,7 @@ type DashboardSession struct {
 type PlayerUnpaid struct {
 	PlayerID    uint64 `json:"playerId"`
 	PlayerName  string `json:"playerName"`
+	PlayerCode  string `json:"playerCode,omitempty"`
 	GroupID     uint64 `json:"groupId"`
 	GroupName   string `json:"groupName"`
 	TotalUnpaid int64  `json:"totalUnpaid"`
@@ -99,13 +100,17 @@ func (s *Service) GetDashboard(ctx context.Context, hostID uint64) (*Dashboard, 
 		if v, ok := p.TotalUnpaid.(int64); ok {
 			unpaid = v
 		}
-		playerUnpaids = append(playerUnpaids, PlayerUnpaid{
+		pu := PlayerUnpaid{
 			PlayerID:    p.PlayerID,
 			PlayerName:  p.PlayerName,
 			GroupID:     p.GroupID,
 			GroupName:   p.GroupName,
 			TotalUnpaid: unpaid,
-		})
+		}
+		if p.PlayerCode.Valid {
+			pu.PlayerCode = p.PlayerCode.String
+		}
+		playerUnpaids = append(playerUnpaids, pu)
 	}
 
 	// Counts

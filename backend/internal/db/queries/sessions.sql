@@ -104,3 +104,7 @@ WHERE id = ? AND status = 'finalized';
 -- Story 4.4: Waive charge
 -- name: UpdateChargeWaived :exec
 UPDATE session_charges SET status = 'waived' WHERE id = ?;
+
+-- Story 4.7: Waive charge with note
+-- name: UpdateChargeStatusWaived :exec
+UPDATE session_charges SET status = ?, description = ? WHERE id = ?;
