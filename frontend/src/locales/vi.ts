@@ -28,6 +28,13 @@ export const vi = {
     paymentReceived: (amount: string) => `Đã nhận ${amount} — cảm ơn nhaa`,
     pendingConfirmTitle: 'Đã ghi nhận — chờ admin xác nhận',
     pendingConfirmDesc: 'Admin sẽ xác nhận sau khi kiểm tra tài khoản.',
+    // Dashboard
+    dashboardTitle: 'Tổng quan',
+  },
+  dashboard: {
+    title: 'Tổng quan',
+    recentSessions: 'Buổi gần đây',
+    playersWithUnpaid: 'Người còn nợ',
   },
   home: {
     greeting: 'Longthu.fun đang chạy 🏸',

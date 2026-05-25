@@ -14,6 +14,8 @@ type Querier interface {
 	// Used to enforce tier caps in Service.BulkCreate.
 	CountActivePlayersInGroup(ctx context.Context, groupID uint64) (int64, error)
 	CountBankAccountsForHost(ctx context.Context, userID uint64) (int64, error)
+	CountFinalizedSessionsForHost(ctx context.Context, hostUserID uint64) (int64, error)
+	CountGroupsForHost(ctx context.Context, hostUserID uint64) (int64, error)
 	// Used to validate that all submitted playerIds belong to the session's Group.
 	// Returns the count of matching active players; caller compares to len(submitted).
 	CountPlayersInGroupByIDs(ctx context.Context, arg CountPlayersInGroupByIDsParams) (int64, error)
@@ -24,6 +26,8 @@ type Querier interface {
 	DeleteSessionCostItem(ctx context.Context, arg DeleteSessionCostItemParams) error
 	// Tenant-isolated charge read via session → group → host.
 	GetChargeByIDForHost(ctx context.Context, arg GetChargeByIDForHostParams) (GetChargeByIDForHostRow, error)
+	// Story 3.2: Host Dashboard queries
+	GetDashboard(ctx context.Context, hostUserID uint64) (interface{}, error)
 	GetDefaultBankAccountByGroup(ctx context.Context, id uint64) (GetDefaultBankAccountByGroupRow, error)
 	// Added in Story 1.8 — used by Group create to auto-pick the host's default
 	// bank as `default_bank_account_id`. Returns sql.ErrNoRows if the host has
@@ -81,8 +85,12 @@ type Querier interface {
 	// (the unique index uk_players_group_display_name would block at INSERT time
 	// anyway, but surfacing the conflict earlier gives a friendlier error).
 	ListPlayerDisplayNamesInGroup(ctx context.Context, groupID uint64) ([]string, error)
+	// Top 5 players with highest unpaid amounts.
+	ListPlayersWithUnpaidForHost(ctx context.Context, hostUserID uint64) ([]ListPlayersWithUnpaidForHostRow, error)
 	// All charges for the session, ordered by id.
 	ListPublicSessionCharges(ctx context.Context, sessionID uint64) ([]ListPublicSessionChargesRow, error)
+	// Latest 5 finalized sessions across all groups.
+	ListRecentSessionsForHost(ctx context.Context, hostUserID uint64) ([]ListRecentSessionsForHostRow, error)
 	// Returns all charges for a session, ordered by id (insertion order).
 	ListSessionCharges(ctx context.Context, sessionID uint64) ([]SessionCharge, error)
 	// Returns all cost items for a session in insertion order.

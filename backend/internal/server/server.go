@@ -13,6 +13,7 @@ import (
 	"github.com/datisekai/longthu.fun/backend/internal/auth"
 	"github.com/datisekai/longthu.fun/backend/internal/bankaccounts"
 	"github.com/datisekai/longthu.fun/backend/internal/config"
+	"github.com/datisekai/longthu.fun/backend/internal/dashboard"
 	"github.com/datisekai/longthu.fun/backend/internal/groups"
 	"github.com/datisekai/longthu.fun/backend/internal/players"
 	"github.com/datisekai/longthu.fun/backend/internal/paymentintents"
@@ -66,6 +67,10 @@ func New(cfg *config.Config, db *sql.DB, gitSHA string) *Server {
 	groupsSvc := groups.NewService(db)
 	groupsHandler := groups.NewHandler(groupsSvc)
 	groupsHandler.RegisterRoutes(v1Auth)
+
+	dashboardSvc := dashboard.NewService(db)
+	dashboardHandler := dashboard.NewHandler(dashboardSvc)
+	dashboardHandler.RegisterRoutes(v1Auth)
 
 	bankAccountsSvc := bankaccounts.NewService(db)
 	bankAccountsHandler := bankaccounts.NewHandler(bankAccountsSvc)
