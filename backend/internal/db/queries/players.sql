@@ -26,3 +26,6 @@ SELECT id, group_id, display_name, public_code, is_active
 FROM players
 WHERE group_id = ? AND is_active = 1
 ORDER BY display_name;
+
+-- name: GetPlayerByID :one
+SELECT id, group_id, display_name, public_code, is_active FROM players WHERE id = ?;

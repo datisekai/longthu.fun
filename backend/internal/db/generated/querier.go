@@ -10,16 +10,19 @@ import (
 )
 
 type Querier interface {
+	CancelPaymentIntent(ctx context.Context, arg CancelPaymentIntentParams) error
 	// Used to enforce tier caps in Service.BulkCreate.
 	CountActivePlayersInGroup(ctx context.Context, groupID uint64) (int64, error)
 	CountBankAccountsForHost(ctx context.Context, userID uint64) (int64, error)
 	// Used to validate that all submitted playerIds belong to the session's Group.
 	// Returns the count of matching active players; caller compares to len(submitted).
 	CountPlayersInGroupByIDs(ctx context.Context, arg CountPlayersInGroupByIDsParams) (int64, error)
+	CreatePaymentIntent(ctx context.Context, arg CreatePaymentIntentParams) (sql.Result, error)
 	// First half of the participant-replace tx (PUT semantics for the participant set).
 	DeleteAllSessionParticipants(ctx context.Context, sessionID uint64) error
 	// Removes a single cost item by its ID. Caller already verified session ownership.
 	DeleteSessionCostItem(ctx context.Context, arg DeleteSessionCostItemParams) error
+	GetDefaultBankAccountByGroup(ctx context.Context, id uint64) (GetDefaultBankAccountByGroupRow, error)
 	// Added in Story 1.8 — used by Group create to auto-pick the host's default
 	// bank as `default_bank_account_id`. Returns sql.ErrNoRows if the host has
 	// no bank account yet; callers should treat that as "default_bank_account_id = NULL".
@@ -27,6 +30,16 @@ type Querier interface {
 	// Host-scoped lookup. Returning sql.ErrNoRows for both "missing" and
 	// "belongs to another host" preserves tenant isolation.
 	GetGroupByIDForHost(ctx context.Context, arg GetGroupByIDForHostParams) (Group, error)
+	// Story 2.4: Payment Intent queries
+	GetLatestFinalizedSessionForGroup(ctx context.Context, groupID uint64) (GetLatestFinalizedSessionForGroupRow, error)
+	GetPaymentIntentByCode(ctx context.Context, code string) (GetPaymentIntentByCodeRow, error)
+	GetPlayerByID(ctx context.Context, id uint64) (GetPlayerByIDRow, error)
+	GetPlayerByPublicCode(ctx context.Context, publicCode string) (GetPlayerByPublicCodeRow, error)
+	// Sum of unpaid charges across ALL sessions for a player (for privacy_mode=public rows).
+	GetPlayerCrossSessionDebt(ctx context.Context, playerID uint64) (interface{}, error)
+	// Story 2.1: Public Group Bill — get session + charges + players by share_code
+	// No auth required. Returns session summary + player rows with charge status.
+	GetPublicGroupBill(ctx context.Context, shareCode sql.NullString) (GetPublicGroupBillRow, error)
 	// Tenant-isolated session read. Joins through groups so a host can't
 	// read another host's session, no enumeration leak.
 	GetSessionByIDForHost(ctx context.Context, arg GetSessionByIDForHostParams) (Session, error)
@@ -57,21 +70,31 @@ type Querier interface {
 	// Returns the active roster for the participant picker (Story 1.10).
 	// Ordered by display_name for stable UX.
 	ListActivePlayersInGroup(ctx context.Context, groupID uint64) ([]ListActivePlayersInGroupRow, error)
+	ListAllUnpaidChargesForPlayer(ctx context.Context, playerID uint64) ([]ListAllUnpaidChargesForPlayerRow, error)
+	ListPendingIntentsForPlayer(ctx context.Context, playerID uint64) ([]ListPendingIntentsForPlayerRow, error)
+	// Current session charge + cross-session unpaid for player ledger.
+	ListPlayerChargesForLedger(ctx context.Context, playerID uint64) ([]ListPlayerChargesForLedgerRow, error)
 	// For duplicate-against-existing-roster detection. Returns even inactive
 	// players so the host can't accidentally re-add a name they marked inactive
 	// (the unique index uk_players_group_display_name would block at INSERT time
 	// anyway, but surfacing the conflict earlier gives a friendlier error).
 	ListPlayerDisplayNamesInGroup(ctx context.Context, groupID uint64) ([]string, error)
+	// All charges for the session, ordered by id.
+	ListPublicSessionCharges(ctx context.Context, sessionID uint64) ([]ListPublicSessionChargesRow, error)
 	// Returns all charges for a session, ordered by id (insertion order).
 	ListSessionCharges(ctx context.Context, sessionID uint64) ([]SessionCharge, error)
 	// Returns all cost items for a session in insertion order.
 	ListSessionCostItems(ctx context.Context, sessionID uint64) ([]ListSessionCostItemsRow, error)
 	// Returns the player IDs participating in a session.
 	ListSessionParticipants(ctx context.Context, sessionID uint64) ([]ListSessionParticipantsRow, error)
+	ListUnpaidChargesForPlayerSession(ctx context.Context, arg ListUnpaidChargesForPlayerSessionParams) ([]ListUnpaidChargesForPlayerSessionRow, error)
+	PaymentIntentCodeExists(ctx context.Context, code string) (bool, error)
 	// Used by shortcode.GenerateUnique's `exists` callback.
 	PlayerExistsByPublicCode(ctx context.Context, publicCode string) (bool, error)
 	// shortcode.GenerateUnique callback against sessions.share_code.
 	SessionShareCodeExists(ctx context.Context, shareCode sql.NullString) (bool, error)
+	UpdateChargeStatus(ctx context.Context, arg UpdateChargeStatusParams) error
+	UpdatePaymentIntentStatus(ctx context.Context, arg UpdatePaymentIntentStatusParams) error
 	// Updates date/title/location on a draft session (host edits before finalize).
 	UpdateSessionDraftMeta(ctx context.Context, arg UpdateSessionDraftMetaParams) error
 	// Sets the session to finalized + records share_code + total_cost + finalized_at.

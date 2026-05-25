@@ -22,6 +22,31 @@ func (q *Queries) CountActivePlayersInGroup(ctx context.Context, groupID uint64)
 	return count, err
 }
 
+const getPlayerByID = `-- name: GetPlayerByID :one
+SELECT id, group_id, display_name, public_code, is_active FROM players WHERE id = ?
+`
+
+type GetPlayerByIDRow struct {
+	ID          uint64
+	GroupID     uint64
+	DisplayName string
+	PublicCode  string
+	IsActive    bool
+}
+
+func (q *Queries) GetPlayerByID(ctx context.Context, id uint64) (GetPlayerByIDRow, error) {
+	row := q.db.QueryRowContext(ctx, getPlayerByID, id)
+	var i GetPlayerByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.GroupID,
+		&i.DisplayName,
+		&i.PublicCode,
+		&i.IsActive,
+	)
+	return i, err
+}
+
 const insertPlayer = `-- name: InsertPlayer :execresult
 INSERT INTO players (group_id, display_name, public_code, is_active)
 VALUES (?, ?, ?, 1)

@@ -15,6 +15,8 @@ import (
 	"github.com/datisekai/longthu.fun/backend/internal/config"
 	"github.com/datisekai/longthu.fun/backend/internal/groups"
 	"github.com/datisekai/longthu.fun/backend/internal/players"
+	"github.com/datisekai/longthu.fun/backend/internal/paymentintents"
+	"github.com/datisekai/longthu.fun/backend/internal/public"
 	"github.com/datisekai/longthu.fun/backend/internal/sessions"
 )
 
@@ -74,6 +76,13 @@ func New(cfg *config.Config, db *sql.DB, gitSHA string) *Server {
 	sessionsSvc := sessions.NewService(db)
 	sessionsHandler := sessions.NewHandler(sessionsSvc, cfg.AppBaseURL)
 	sessionsHandler.RegisterRoutes(v1Auth)
+
+	publicHandler := public.NewHandler(db)
+	publicHandler.RegisterRoutes(v1Public)
+
+	paymentIntentsSvc := paymentintents.NewService(db)
+	paymentIntentsHandler := paymentintents.NewHandler(paymentIntentsSvc)
+	paymentIntentsHandler.RegisterPublicRoutes(v1Public)
 
 	return &Server{cfg: cfg, db: db, router: r}
 }
