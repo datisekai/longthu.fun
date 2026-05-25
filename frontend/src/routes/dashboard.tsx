@@ -29,6 +29,8 @@ interface DashboardData {
   }>;
   groupCount: number;
   sessionCount: number;
+  suspectedCount: number;
+  unmatchedCount: number;
 }
 
 function ActionBanner({ sessionCount, groupCount }: { sessionCount: number; groupCount: number }) {
@@ -72,7 +74,7 @@ function DashboardPage() {
     );
   }
 
-  const dash = data ?? { totalUnpaid: 0, recentSessions: [], playersWithUnpaid: [], groupCount: 0, sessionCount: 0 };
+  const dash = data ?? { totalUnpaid: 0, recentSessions: [], playersWithUnpaid: [], groupCount: 0, sessionCount: 0, suspectedCount: 0, unmatchedCount: 0 };
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-6 px-4 py-8">
@@ -93,11 +95,11 @@ function DashboardPage() {
           <p className="text-xs text-muted-foreground">Cần thu</p>
         </div>
         <div className="rounded-md border border-input bg-muted p-3 text-center">
-          <p className="text-2xl font-bold font-display text-yellow-500">0</p>
+          <p className="text-2xl font-bold font-display text-yellow-500">{dash.suspectedCount}</p>
           <p className="text-xs text-muted-foreground">Cần xác nhận</p>
         </div>
         <div className="rounded-md border border-input bg-muted p-3 text-center">
-          <p className="text-2xl font-bold font-display text-orange-500">0</p>
+          <p className="text-2xl font-bold font-display text-orange-500">{dash.unmatchedCount}</p>
           <p className="text-xs text-muted-foreground">Chưa khớp</p>
         </div>
       </div>

@@ -122,7 +122,7 @@ func (s *Service) Create(ctx context.Context, hostID uint64, params CreateParams
 	return toPublic(group), nil
 }
 
-func toPublic(g dbgen.Group) PublicGroup {
+func toPublic(g dbgen.GetGroupByIDForHostRow) PublicGroup {
 	out := PublicGroup{
 		ID:                g.ID,
 		Name:              g.Name,

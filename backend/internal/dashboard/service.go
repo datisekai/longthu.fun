@@ -16,30 +16,32 @@ func NewService(db *sql.DB) *Service {
 }
 
 type Dashboard struct {
-	TotalUnpaid          int64              `json:"totalUnpaid"`
-	RecentSessions       []DashboardSession `json:"recentSessions"`
-	PlayersWithUnpaid   []PlayerUnpaid    `json:"playersWithUnpaid"`
-	GroupCount          int                `json:"groupCount"`
-	SessionCount        int                `json:"sessionCount"`
+	TotalUnpaid       int64              `json:"totalUnpaid"`
+	RecentSessions    []DashboardSession `json:"recentSessions"`
+	PlayersWithUnpaid []PlayerUnpaid    `json:"playersWithUnpaid"`
+	GroupCount       int                `json:"groupCount"`
+	SessionCount     int                `json:"sessionCount"`
+	SuspectedCount   int                `json:"suspectedCount"`
+	UnmatchedCount   int                `json:"unmatchedCount"`
 }
 
 type DashboardSession struct {
-	SessionID    uint64  `json:"sessionId"`
-	Date        string  `json:"date"`
-	Title       *string `json:"title,omitempty"`
-	GroupID     uint64  `json:"groupId"`
-	GroupName   string  `json:"groupName"`
-	ShareCode   *string `json:"shareCode,omitempty"`
-	TotalCost   int64   `json:"totalCost"`
-	FinalizedAt string  `json:"finalizedAt"`
+	SessionID  uint64  `json:"sessionId"`
+	Date      string  `json:"date"`
+	Title     *string `json:"title,omitempty"`
+	GroupID   uint64  `json:"groupId"`
+	GroupName string  `json:"groupName"`
+	ShareCode *string `json:"shareCode,omitempty"`
+	TotalCost int64   `json:"totalCost"`
+	FinalizedAt string `json:"finalizedAt"`
 }
 
 type PlayerUnpaid struct {
-	PlayerID   uint64 `json:"playerId"`
-	PlayerName string `json:"playerName"`
-	GroupID    uint64 `json:"groupId"`
-	GroupName  string `json:"groupName"`
-	TotalUnpaid int64 `json:"totalUnpaid"`
+	PlayerID    uint64 `json:"playerId"`
+	PlayerName  string `json:"playerName"`
+	GroupID     uint64 `json:"groupId"`
+	GroupName   string `json:"groupName"`
+	TotalUnpaid int64  `json:"totalUnpaid"`
 }
 
 func (s *Service) GetDashboard(ctx context.Context, hostID uint64) (*Dashboard, error) {
@@ -99,9 +101,9 @@ func (s *Service) GetDashboard(ctx context.Context, hostID uint64) (*Dashboard, 
 		}
 		playerUnpaids = append(playerUnpaids, PlayerUnpaid{
 			PlayerID:    p.PlayerID,
-			PlayerName: p.PlayerName,
-			GroupID:    p.GroupID,
-			GroupName:  p.GroupName,
+			PlayerName:  p.PlayerName,
+			GroupID:     p.GroupID,
+			GroupName:   p.GroupName,
 			TotalUnpaid: unpaid,
 		})
 	}
@@ -110,11 +112,17 @@ func (s *Service) GetDashboard(ctx context.Context, hostID uint64) (*Dashboard, 
 	groupCount, _ := q.CountGroupsForHost(ctx, hostID)
 	sessionCount, _ := q.CountFinalizedSessionsForHost(ctx, hostID)
 
+	// Suspected and unmatched counts (Story 6.5)
+	suspectedCount, _ := q.CountSuspectedPaymentsForHost(ctx, sql.NullInt64{Int64: int64(hostID), Valid: true})
+	unmatchedCount, _ := q.CountUnmatchedPaymentsForHost(ctx, sql.NullInt64{Int64: int64(hostID), Valid: true})
+
 	return &Dashboard{
-		TotalUnpaid:        totalUnpaid,
-		RecentSessions:     dashSessions,
+		TotalUnpaid:       totalUnpaid,
+		RecentSessions:    dashSessions,
 		PlayersWithUnpaid: playerUnpaids,
-		GroupCount:        int(groupCount),
-		SessionCount:      int(sessionCount),
+		GroupCount:       int(groupCount),
+		SessionCount:     int(sessionCount),
+		SuspectedCount:   int(suspectedCount),
+		UnmatchedCount:   int(unmatchedCount),
 	}, nil
 }

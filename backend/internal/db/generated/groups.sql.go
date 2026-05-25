@@ -8,6 +8,7 @@ package dbgen
 import (
 	"context"
 	"database/sql"
+	"time"
 )
 
 const getGroupByIDForHost = `-- name: GetGroupByIDForHost :one
@@ -24,11 +25,26 @@ type GetGroupByIDForHostParams struct {
 	HostUserID uint64
 }
 
+type GetGroupByIDForHostRow struct {
+	ID                      uint64
+	HostUserID              uint64
+	Name                    string
+	Slug                    sql.NullString
+	DefaultBankAccountID    sql.NullInt64
+	TelegramChatID          sql.NullInt64
+	PrivacyMode             string
+	AutoDetectEnabled       bool
+	AutoDetectBankAccountID sql.NullInt64
+	ArchivedAt              sql.NullTime
+	CreatedAt               time.Time
+	UpdatedAt               time.Time
+}
+
 // Host-scoped lookup. Returning sql.ErrNoRows for both "missing" and
 // "belongs to another host" preserves tenant isolation.
-func (q *Queries) GetGroupByIDForHost(ctx context.Context, arg GetGroupByIDForHostParams) (Group, error) {
+func (q *Queries) GetGroupByIDForHost(ctx context.Context, arg GetGroupByIDForHostParams) (GetGroupByIDForHostRow, error) {
 	row := q.db.QueryRowContext(ctx, getGroupByIDForHost, arg.ID, arg.HostUserID)
-	var i Group
+	var i GetGroupByIDForHostRow
 	err := row.Scan(
 		&i.ID,
 		&i.HostUserID,
